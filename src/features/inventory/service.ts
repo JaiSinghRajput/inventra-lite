@@ -4,6 +4,7 @@ import { products, stockMovements, tenants, auditLogs, user } from '../../server
 import { generateId } from '../../server/utils/id';
 import type { TenantContext } from '../auth/middleware';
 import type { CreateProductInput, UpdateProductInput, AdjustStockInput } from './schemas';
+import { deleteFromCloudinary } from '../upload/cloudinary-server';
 
 export class InventoryService {
   static async createProduct(context: TenantContext, input: CreateProductInput) {
@@ -75,7 +76,7 @@ export class InventoryService {
   }
 
   static async updateProduct(context: TenantContext, input: UpdateProductInput) {
-    return await db.transaction(async (tx) => {
+    const oldImageToClean = await db.transaction(async (tx) => {
       const [existing] = await tx
         .select()
         .from(products)
@@ -83,6 +84,11 @@ export class InventoryService {
         .limit(1);
 
       if (!existing) throw new Error('Product not found');
+
+      let replacedImageUrl: string | null = null;
+      if (existing.imageUrl && input.imageUrl !== undefined && existing.imageUrl !== input.imageUrl) {
+        replacedImageUrl = existing.imageUrl;
+      }
 
       await tx
         .update(products)
@@ -113,8 +119,16 @@ export class InventoryService {
         metadataJson: JSON.stringify({ name: input.name, sellingPrice: input.sellingPrice }),
       });
 
-      return { success: true };
+      return replacedImageUrl;
     });
+
+    if (oldImageToClean) {
+      await deleteFromCloudinary(oldImageToClean).catch((err) => {
+        console.warn('Failed to delete replaced Cloudinary asset:', err);
+      });
+    }
+
+    return { success: true };
   }
 
   static async deleteProduct(context: TenantContext, productId: string) {
@@ -123,7 +137,7 @@ export class InventoryService {
       throw new Error('Forbidden: Only the store Owner can delete products.');
     }
 
-    return await db.transaction(async (tx) => {
+    const deletedImageUrl = await db.transaction(async (tx) => {
       const [existing] = await tx
         .select()
         .from(products)
@@ -153,11 +167,20 @@ export class InventoryService {
         action: 'DELETE_PRODUCT',
         entityType: 'product',
         entityId: productId,
-        metadataJson: JSON.stringify({ name: existing.name, sku: existing.sku }),
+        metadataJson: JSON.stringify({ name: existing.name, sku: existing.sku, imageUrl: existing.imageUrl }),
       });
 
-      return { success: true };
+      return existing.imageUrl;
     });
+
+    // Delete image from Cloudinary if uploaded there
+    if (deletedImageUrl) {
+      await deleteFromCloudinary(deletedImageUrl).catch((err) => {
+        console.warn('Failed to delete Cloudinary asset after product deletion:', err);
+      });
+    }
+
+    return { success: true };
   }
 
   static async adjustStock(context: TenantContext, input: AdjustStockInput) {

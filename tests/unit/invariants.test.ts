@@ -95,4 +95,41 @@ describe('Server-Side Billing Invariants & Currency Utilities', () => {
     expect(canDeleteCustomer('OWNER')).toBe(true);
     expect(canDeleteCustomer('MANAGER')).toBe(false);
   });
+
+  it('correctly extracts Cloudinary public_id from various Cloudinary URL formats and rejects non-Cloudinary URLs', async () => {
+    const { extractCloudinaryPublicId } = await import('../../src/features/upload/cloudinary-server');
+
+    // Standard versioned URL
+    expect(
+      extractCloudinaryPublicId('https://res.cloudinary.com/mycloud/image/upload/v1727622839/inventra_products/sample_123.jpg')
+    ).toBe('inventra_products/sample_123');
+
+    // Unversioned URL
+    expect(
+      extractCloudinaryPublicId('https://res.cloudinary.com/mycloud/image/upload/inventra_products/sample_123.webp')
+    ).toBe('inventra_products/sample_123');
+
+    // Transformed URL
+    expect(
+      extractCloudinaryPublicId('https://res.cloudinary.com/mycloud/image/upload/c_scale,w_500/v1727622839/inventra_products/sample_123.png')
+    ).toBe('inventra_products/sample_123');
+
+    // Non-cloudinary URL
+    expect(extractCloudinaryPublicId('https://images.unsplash.com/photo-123456')).toBeNull();
+    expect(extractCloudinaryPublicId(null)).toBeNull();
+    expect(extractCloudinaryPublicId('')).toBeNull();
+  });
+
+  it('handles deleteFromCloudinary safely when URL is external or credentials are unset', async () => {
+    const { deleteFromCloudinary } = await import('../../src/features/upload/cloudinary-server');
+
+    // Non-cloudinary URL
+    const externalResult = await deleteFromCloudinary('https://images.unsplash.com/photo-123456');
+    expect(externalResult.success).toBe(false);
+    expect(externalResult.reason).toContain('Not a recognized Cloudinary');
+
+    // Empty URL
+    const emptyResult = await deleteFromCloudinary('');
+    expect(emptyResult.success).toBe(false);
+  });
 });
