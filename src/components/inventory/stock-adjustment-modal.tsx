@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SlidersHorizontal, Plus, Minus, AlertCircle, ArrowRight, Check } from 'lucide-react';
+import { SlidersHorizontal, Plus, Minus, AlertCircle, ArrowRight, Check, Keyboard, Hash, Calculator, Delete, Phone } from 'lucide-react';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
 import { formatQuantity, parseCleanQuantity } from '../../lib/quantity';
@@ -20,6 +20,7 @@ interface StockAdjustmentModalProps {
 }
 
 type AdjustmentMode = 'direct' | 'delta';
+type KeyboardMode = 'tel' | 'standard' | 'numeric' | 'onscreen';
 
 export function StockAdjustmentModal({
   isOpen,
@@ -43,6 +44,26 @@ export function StockAdjustmentModal({
   const [deltaSign, setDeltaSign] = useState<'+' | '-'>('+');
   const [deltaAmount, setDeltaAmount] = useState<string>('');
 
+  // Keyboard mode: 'tel' (dialer with + and - keys), 'standard' (full text keyboard), 'numeric' (0-9 pad), or 'onscreen' (built-in touch pad)
+  const [keyboardMode, setKeyboardMode] = useState<KeyboardMode>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('inventra_stock_adj_keyboard_mode');
+      if (saved === 'tel' || saved === 'standard' || saved === 'numeric' || saved === 'onscreen') {
+        return saved;
+      }
+    }
+    return 'tel';
+  });
+
+  const handleSetKeyboardMode = (m: KeyboardMode) => {
+    setKeyboardMode(m);
+    try {
+      localStorage.setItem('inventra_stock_adj_keyboard_mode', m);
+    } catch {
+      // ignore
+    }
+  };
+
   // Audit reason
   const [reason, setReason] = useState<string>('Physical count audit');
   const [customReason, setCustomReason] = useState<string>('');
@@ -59,6 +80,63 @@ export function StockAdjustmentModal({
       setError('');
     }
   }, [isOpen, product]);
+
+  // Keypad button press handler
+  const handleKeypadPress = (key: string) => {
+    if (mode === 'direct') {
+      if (key === 'BACKSPACE') {
+        setDirectCount((prev) => (prev.length > 1 ? prev.slice(0, -1) : ''));
+      } else if (key === 'CLEAR') {
+        setDirectCount('');
+      } else if (key === '.') {
+        if (!directCount.includes('.')) {
+          setDirectCount((prev) => (prev === '' ? '0.' : prev + '.'));
+        }
+      } else {
+        setDirectCount((prev) => (prev === '0' ? key : prev + key));
+      }
+    } else {
+      if (key === 'BACKSPACE') {
+        setDeltaAmount((prev) => (prev.length > 1 ? prev.slice(0, -1) : ''));
+      } else if (key === 'CLEAR') {
+        setDeltaAmount('');
+      } else if (key === '.') {
+        if (!deltaAmount.includes('.')) {
+          setDeltaAmount((prev) => (prev === '' ? '0.' : prev + '.'));
+        }
+      } else {
+        setDeltaAmount((prev) => (prev === '0' ? key : prev + key));
+      }
+    }
+  };
+
+  // Direct count input handler (sanitizes non-numeric chars)
+  const handleDirectChange = (val: string) => {
+    let clean = val.replace(/[^0-9.]/g, '');
+    const parts = clean.split('.');
+    if (parts.length > 2) {
+      clean = `${parts[0]}.${parts.slice(1).join('')}`;
+    }
+    setDirectCount(clean);
+  };
+
+  // Delta amount input handler (auto-detects +/- signs if typed on keyboard)
+  const handleDeltaChange = (val: string) => {
+    let text = val;
+    if (text.includes('-')) {
+      setDeltaSign('-');
+      text = text.replace(/-/g, '');
+    } else if (text.includes('+')) {
+      setDeltaSign('+');
+      text = text.replace(/\+/g, '');
+    }
+    let clean = text.replace(/[^0-9.]/g, '');
+    const parts = clean.split('.');
+    if (parts.length > 2) {
+      clean = `${parts[0]}.${parts.slice(1).join('')}`;
+    }
+    setDeltaAmount(clean);
+  };
 
   // Calculate resulting new balance and delta
   let computedNewBalance = currentStock;
@@ -178,22 +256,116 @@ export function StockAdjustmentModal({
               <span className="text-[11px] text-brand-600 font-medium">Replaces existing quantity</span>
             </div>
 
+            {/* Keyboard Mode Selector */}
+            <div className="flex items-center justify-between text-[11px] text-slate-500">
+              <span className="font-medium text-slate-500">Keypad Style:</span>
+              <div className="inline-flex rounded-lg bg-slate-200/80 p-0.5 text-[10px] sm:text-[11px] font-medium">
+                <button
+                  type="button"
+                  onClick={() => handleSetKeyboardMode('tel')}
+                  className={`px-2 py-0.5 rounded-md transition-all flex items-center gap-1 ${
+                    keyboardMode === 'tel'
+                      ? 'bg-white text-brand-700 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Phone dialer keypad with + and - keys"
+                >
+                  <Phone className="w-3 h-3" />
+                  Tel (+ / -)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetKeyboardMode('standard')}
+                  className={`px-2 py-0.5 rounded-md transition-all flex items-center gap-1 ${
+                    keyboardMode === 'standard'
+                      ? 'bg-white text-brand-700 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Full standard keyboard"
+                >
+                  <Keyboard className="w-3 h-3" />
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetKeyboardMode('onscreen')}
+                  className={`px-2 py-0.5 rounded-md transition-all flex items-center gap-1 ${
+                    keyboardMode === 'onscreen'
+                      ? 'bg-white text-brand-700 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="On-screen touch pad without virtual keyboard"
+                >
+                  <Calculator className="w-3 h-3" />
+                  Touch Pad
+                </button>
+              </div>
+            </div>
+
             <div className="relative">
               <input
-                type="text"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
+                type={keyboardMode === 'tel' ? 'tel' : 'text'}
+                inputMode={
+                  keyboardMode === 'onscreen'
+                    ? 'none'
+                    : keyboardMode === 'numeric'
+                    ? 'numeric'
+                    : keyboardMode === 'standard'
+                    ? 'text'
+                    : 'tel'
+                }
+                readOnly={keyboardMode === 'onscreen'}
                 value={directCount}
-                onChange={(e) => setDirectCount(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                placeholder="Enter exact count (e.g. 8)"
-                autoFocus
-                className="w-full text-2xl font-black py-2.5 px-3 rounded-xl border-2 border-brand-500 bg-white text-slate-900 text-center tracking-wide focus:outline-none focus:ring-4 focus:ring-brand-500/20 shadow-inner"
+                onChange={(e) => handleDirectChange(e.target.value)}
+                onFocus={(e) => {
+                  if (keyboardMode !== 'onscreen') {
+                    e.target.select();
+                  }
+                }}
+                placeholder="0"
+                autoFocus={keyboardMode !== 'onscreen'}
+                className="w-full text-2xl font-black py-2.5 px-14 rounded-xl border-2 border-brand-500 bg-white text-slate-900 text-center tracking-wide focus:outline-none focus:ring-4 focus:ring-brand-500/20 shadow-inner"
               />
-              <span className="absolute right-3.5 top-3.5 text-xs font-bold text-slate-400 uppercase select-none pointer-events-none">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-bold text-xs uppercase select-none pointer-events-none">
                 {unit}
               </span>
             </div>
+
+            {/* On-Screen Touch Numpad */}
+            {keyboardMode === 'onscreen' && (
+              <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                <div className="grid grid-cols-3 gap-1.5">
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleKeypadPress(digit)}
+                      className="h-10 text-base font-bold bg-slate-50 text-slate-800 rounded-lg border border-slate-200 hover:bg-slate-100 active:bg-brand-50 active:border-brand-300 transition-colors flex items-center justify-center cursor-pointer"
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleKeypadPress('BACKSPACE')}
+                    className="h-10 text-xs font-bold bg-slate-100 text-slate-700 rounded-lg border border-slate-200 hover:bg-slate-200 active:bg-slate-300 transition-colors flex items-center justify-center cursor-pointer"
+                    title="Backspace"
+                  >
+                    <Delete className="w-4 h-4 text-slate-700" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between pt-2 px-1 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => handleKeypadPress('CLEAR')}
+                    className="font-semibold text-rose-600 hover:text-rose-700 hover:underline"
+                  >
+                    Clear Input
+                  </button>
+                  <span className="text-[10px] text-slate-400">Touch Numpad Active</span>
+                </div>
+              </div>
+            )}
 
             {/* Quick Nudge Buttons for Direct Mode */}
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -245,7 +417,7 @@ export function StockAdjustmentModal({
               <span className="text-[11px] text-slate-500">Add or deduct units</span>
             </div>
 
-            {/* Dedicated + Add / - Deduct Toggle to avoid mobile keyboard missing minus sign */}
+            {/* Dedicated + Add / - Deduct Toggle */}
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -273,22 +445,116 @@ export function StockAdjustmentModal({
               </button>
             </div>
 
+            {/* Keyboard Mode Selector */}
+            <div className="flex items-center justify-between text-[11px] text-slate-500">
+              <span className="font-medium text-slate-500">Keypad Style:</span>
+              <div className="inline-flex rounded-lg bg-slate-200/80 p-0.5 text-[10px] sm:text-[11px] font-medium">
+                <button
+                  type="button"
+                  onClick={() => handleSetKeyboardMode('tel')}
+                  className={`px-2 py-0.5 rounded-md transition-all flex items-center gap-1 ${
+                    keyboardMode === 'tel'
+                      ? 'bg-white text-brand-700 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Phone dialer keypad with + and - keys"
+                >
+                  <Phone className="w-3 h-3" />
+                  Tel (+ / -)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetKeyboardMode('standard')}
+                  className={`px-2 py-0.5 rounded-md transition-all flex items-center gap-1 ${
+                    keyboardMode === 'standard'
+                      ? 'bg-white text-brand-700 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Full standard keyboard"
+                >
+                  <Keyboard className="w-3 h-3" />
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetKeyboardMode('onscreen')}
+                  className={`px-2 py-0.5 rounded-md transition-all flex items-center gap-1 ${
+                    keyboardMode === 'onscreen'
+                      ? 'bg-white text-brand-700 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="On-screen touch pad without virtual keyboard"
+                >
+                  <Calculator className="w-3 h-3" />
+                  Touch Pad
+                </button>
+              </div>
+            </div>
+
             <div className="relative">
               <input
-                type="text"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
+                type={keyboardMode === 'tel' ? 'tel' : 'text'}
+                inputMode={
+                  keyboardMode === 'onscreen'
+                    ? 'none'
+                    : keyboardMode === 'numeric'
+                    ? 'numeric'
+                    : keyboardMode === 'standard'
+                    ? 'text'
+                    : 'tel'
+                }
+                readOnly={keyboardMode === 'onscreen'}
                 value={deltaAmount}
-                onChange={(e) => setDeltaAmount(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                placeholder="Quantity to add or deduct"
-                autoFocus
-                className="w-full text-2xl font-black py-2.5 px-3 rounded-xl border-2 border-slate-300 bg-white text-slate-900 text-center tracking-wide focus:outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/20 shadow-inner"
+                onChange={(e) => handleDeltaChange(e.target.value)}
+                onFocus={(e) => {
+                  if (keyboardMode !== 'onscreen') {
+                    e.target.select();
+                  }
+                }}
+                placeholder="0"
+                autoFocus={keyboardMode !== 'onscreen'}
+                className="w-full text-2xl font-black py-2.5 px-14 rounded-xl border-2 border-slate-300 bg-white text-slate-900 text-center tracking-wide focus:outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/20 shadow-inner"
               />
-              <span className="absolute right-3.5 top-3.5 text-xs font-bold text-slate-400 uppercase select-none pointer-events-none">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-bold text-xs uppercase select-none pointer-events-none">
                 {unit}
               </span>
             </div>
+
+            {/* On-Screen Touch Numpad */}
+            {keyboardMode === 'onscreen' && (
+              <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                <div className="grid grid-cols-3 gap-1.5">
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleKeypadPress(digit)}
+                      className="h-10 text-base font-bold bg-slate-50 text-slate-800 rounded-lg border border-slate-200 hover:bg-slate-100 active:bg-brand-50 active:border-brand-300 transition-colors flex items-center justify-center cursor-pointer"
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleKeypadPress('BACKSPACE')}
+                    className="h-10 text-xs font-bold bg-slate-100 text-slate-700 rounded-lg border border-slate-200 hover:bg-slate-200 active:bg-slate-300 transition-colors flex items-center justify-center cursor-pointer"
+                    title="Backspace"
+                  >
+                    <Delete className="w-4 h-4 text-slate-700" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between pt-2 px-1 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => handleKeypadPress('CLEAR')}
+                    className="font-semibold text-rose-600 hover:text-rose-700 hover:underline"
+                  >
+                    Clear Input
+                  </button>
+                  <span className="text-[10px] text-slate-400">Touch Numpad Active</span>
+                </div>
+              </div>
+            )}
 
             {/* Quick Delta Chips */}
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
