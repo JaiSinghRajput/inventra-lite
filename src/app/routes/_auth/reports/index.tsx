@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { BarChart3, AlertTriangle, Calendar, ArrowRight, DollarSign } from 'lucide-react';
 import { getDailySalesSummaryFn, getLowStockAlertsFn } from '../../../../features/reports/server';
 import { formatINR } from '../../../../lib/currency';
+import { formatQuantity } from '../../../../lib/quantity';
 import { Card } from '../../../../components/ui/card';
 import { Badge } from '../../../../components/ui/badge';
 import { Button } from '../../../../components/ui/button';
@@ -112,10 +113,10 @@ function ReportsComponent() {
                       <div className="text-[11px] text-slate-400 font-mono">{p.sku}</div>
                     </td>
                     <td className="py-2.5 px-4 font-bold text-rose-600 font-mono">
-                      {p.stockQuantity} {p.unit}
+                      {formatQuantity(p.stockQuantity)} {p.unit}
                     </td>
                     <td className="py-2.5 px-4 text-slate-500 font-mono">
-                      {p.lowStockThreshold} {p.unit}
+                      {formatQuantity(p.lowStockThreshold)} {p.unit}
                     </td>
                     <td className="py-2.5 px-4 text-right">
                       <Link to="/purchases/new">

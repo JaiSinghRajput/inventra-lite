@@ -15,11 +15,49 @@ function LoginComponent() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Check URL query parameters for OAuth error (e.g. ?error=access_denied or ?error_description=...)
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlError = params.get('error') || params.get('error_description') || params.get('message');
+      if (urlError) {
+        if (urlError.toLowerCase().includes('access_denied')) {
+          setError('Google sign-in was cancelled. Please try again.');
+        } else if (urlError.toLowerCase().includes('redirect_uri_mismatch')) {
+          setError('OAuth redirect URI mismatch. Please ensure this origin is added to Authorized Redirect URIs in Google Cloud Console.');
+        } else {
+          setError(`Sign in error: ${urlError}`);
+        }
+      }
+    }
+  }, []);
+
+  const validateForm = () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setError('Please enter your email address.');
+      return false;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid email address (e.g. name@domain.com).');
+      return false;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
+
     setError('');
     setLoading(true);
 
@@ -27,9 +65,10 @@ function LoginComponent() {
       const res = await authClient.signIn.email({
         email: email.trim().toLowerCase(),
         password,
+        rememberMe,
       });
 
-      if (res.error) {
+      if (res?.error) {
         setError(res.error.message || 'Invalid email or password');
       } else {
         navigate({ to: '/pos' });
@@ -45,12 +84,16 @@ function LoginComponent() {
     setError('');
     setLoading(true);
     try {
-      await authClient.signIn.social({
+      const res = await authClient.signIn.social({
         provider: 'google',
         callbackURL: '/pos',
       });
+      if (res?.error) {
+        setError(res.error.message || 'Google sign in failed. Please try again.');
+        setLoading(false);
+      }
     } catch (err: any) {
-      setError(err?.message || 'Google sign in failed');
+      setError(err?.message || 'Google sign in failed. Please verify your connection.');
       setLoading(false);
     }
   };
@@ -115,6 +158,19 @@ function LoginComponent() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+
+            {/* Remember Me Checkbox to prevent early logout on devices */}
+            <div className="flex items-center justify-between text-xs pt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                />
+                <span className="font-medium">Stay signed in on this device</span>
+              </label>
+            </div>
 
             <Button type="submit" className="w-full mt-2" isLoading={loading}>
               Sign In to Register

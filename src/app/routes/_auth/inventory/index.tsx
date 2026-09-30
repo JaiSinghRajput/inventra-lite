@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Plus, Search, Filter, AlertTriangle, ArrowUpDown, SlidersHorizontal, Package } from 'lucide-react';
+import { Plus, Search, Filter, AlertTriangle, ArrowUpDown, SlidersHorizontal, Package, Eye } from 'lucide-react';
 import { listProductsFn, adjustStockFn } from '../../../../features/inventory/server';
 import { formatINR, paiseToINR } from '../../../../lib/currency';
+import { formatQuantity } from '../../../../lib/quantity';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
 import { Badge } from '../../../../components/ui/badge';
-import { Modal } from '../../../../components/ui/modal';
+import { ImageModal } from '../../../../components/ui/image-modal';
+import { StockAdjustmentModal } from '../../../../components/inventory/stock-adjustment-modal';
 import { EmptyState } from '../../../../components/feedback/empty-state';
 import { SkeletonTable } from '../../../../components/feedback/skeleton-table';
 
@@ -22,10 +24,10 @@ function InventoryListComponent() {
 
   // Stock Adjustment Modal
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
-  const [adjustmentDelta, setAdjustmentDelta] = useState<string>('');
-  const [adjustmentReason, setAdjustmentReason] = useState<string>('');
   const [isAdjusting, setIsAdjusting] = useState(false);
-  const [adjustError, setAdjustError] = useState('');
+
+  // Image Preview Modal
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string; subtitle?: string } | null>(null);
 
   const loadProducts = async () => {
     setIsLoading(true);
@@ -48,36 +50,18 @@ function InventoryListComponent() {
     loadProducts();
   }, [search, lowStockOnly]);
 
-  const handleAdjustSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProduct) return;
-    const delta = parseFloat(adjustmentDelta);
-    if (isNaN(delta) || delta === 0) {
-      setAdjustError('Please specify a non-zero adjustment quantity');
-      return;
-    }
-    if (!adjustmentReason.trim()) {
-      setAdjustError('Mandatory reason required for physical audit');
-      return;
-    }
-
-    setAdjustError('');
+  const handleAdjustConfirm = async (productId: string, delta: number, reason: string) => {
     setIsAdjusting(true);
-
     try {
       await adjustStockFn({
         data: {
-          productId: selectedProduct.id,
+          productId,
           delta,
-          reason: adjustmentReason.trim(),
+          reason,
         },
       });
       setSelectedProduct(null);
-      setAdjustmentDelta('');
-      setAdjustmentReason('');
-      loadProducts();
-    } catch (err: any) {
-      setAdjustError(err?.message || 'Adjustment failed');
+      await loadProducts();
     } finally {
       setIsAdjusting(false);
     }
@@ -158,11 +142,21 @@ function InventoryListComponent() {
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           {p.imageUrl ? (
-                            <img
-                              src={p.imageUrl}
-                              alt={p.name}
-                              className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0 bg-slate-100"
-                            />
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImage({ url: p.imageUrl, title: p.name, subtitle: `${p.sku}${p.barcode ? ` • ${p.barcode}` : ''}` })}
+                              className="group relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500"
+                              title="Click to view full image"
+                            >
+                              <img
+                                src={p.imageUrl}
+                                alt={p.name}
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200"
+                              />
+                              <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                <Eye className="w-3.5 h-3.5" />
+                              </div>
+                            </button>
                           ) : (
                             <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
                               <Package className="w-5 h-5" />
@@ -187,11 +181,11 @@ function InventoryListComponent() {
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1.5">
                           <span className={`font-extrabold ${isLow ? 'text-amber-600' : 'text-slate-800'}`}>
-                            {p.stockQuantity} {p.unit}
+                            {formatQuantity(p.stockQuantity)} {p.unit}
                           </span>
                           {isLow && (
                             <Badge variant="warning" className="text-[10px]">
-                              Low (≤{threshold})
+                              Low (≤{formatQuantity(threshold)})
                             </Badge>
                           )}
                         </div>
@@ -219,51 +213,23 @@ function InventoryListComponent() {
         </div>
       )}
 
-      {/* ADJUST STOCK MODAL */}
-      {selectedProduct && (
-        <Modal
-          isOpen={true}
-          onClose={() => setSelectedProduct(null)}
-          title={`Adjust Stock: ${selectedProduct.name}`}
-          description={`Current balance: ${selectedProduct.stockQuantity} ${selectedProduct.unit}. Enter physical count adjustment.`}
-        >
-          <form onSubmit={handleAdjustSubmit} className="space-y-4">
-            {adjustError && (
-              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
-                {adjustError}
-              </div>
-            )}
+      {/* STOCK ADJUSTMENT MODAL (DIRECT & DELTA SUPPORT) */}
+      <StockAdjustmentModal
+        isOpen={!!selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        product={selectedProduct}
+        onConfirm={handleAdjustConfirm}
+        isLoading={isAdjusting}
+      />
 
-            <div>
-              <Input
-                label={`Quantity Delta (+ to add, - to subtract)`}
-                type="number"
-                step="0.001"
-                placeholder="e.g. +5 or -2"
-                value={adjustmentDelta}
-                onChange={(e) => setAdjustmentDelta(e.target.value)}
-                required
-                autoFocus
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Enter +10 to add 10 units, or -5 to deduct 5 units for damaged/expired goods.
-              </p>
-            </div>
-
-            <Input
-              label="Mandatory Audit Reason"
-              placeholder="e.g. Physical inventory count correction, Broken bottle"
-              value={adjustmentReason}
-              onChange={(e) => setAdjustmentReason(e.target.value)}
-              required
-            />
-
-            <Button type="submit" isLoading={isAdjusting} className="w-full">
-              Confirm Stock Adjustment
-            </Button>
-          </form>
-        </Modal>
-      )}
+      {/* FULL-SCREEN IMAGE LIGHTBOX MODAL */}
+      <ImageModal
+        isOpen={!!previewImage}
+        onClose={() => setPreviewImage(null)}
+        imageUrl={previewImage?.url}
+        title={previewImage?.title}
+        subtitle={previewImage?.subtitle}
+      />
     </div>
   );
 }

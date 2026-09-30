@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Trash2, Truck } from 'lucide-react';
 import { listProductsFn } from '../../../../features/inventory/server';
 import { recordStockInFn } from '../../../../features/purchases/server';
 import { inrToPaise, formatINR } from '../../../../lib/currency';
+import { formatQuantity } from '../../../../lib/quantity';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
 import { Card } from '../../../../components/ui/card';
@@ -158,7 +159,7 @@ function NewPurchaseComponent() {
               >
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({p.sku}) — Current Stock: {p.stockQuantity} {p.unit}
+                    {p.name} ({p.sku}) — Current Stock: {formatQuantity(p.stockQuantity)} {p.unit}
                   </option>
                 ))}
               </select>

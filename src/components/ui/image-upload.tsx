@@ -3,6 +3,7 @@ import { Upload, X, Image as ImageIcon, Link as LinkIcon, Check, Loader2, Sparkl
 import { compressImage, formatFileSize, CompressionResult } from '../../lib/image-compression';
 import { uploadToCloudinary } from '../../features/upload/cloudinary';
 import { getCloudinaryConfigFn } from '../../features/upload/server';
+import { ImageModal } from './image-modal';
 
 interface ImageUploadProps {
   value?: string;
@@ -18,6 +19,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<'upload' | 'url'>('upload');
   const [directUrl, setDirectUrl] = useState(value || '');
+  const [isZoomModalOpen, setIsZoomModalOpen] = useState(false);
 
   const [isCompressing, setIsCompressing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -137,35 +139,53 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
 
       {/* Preview Section */}
       {value ? (
-        <div className="relative group w-36 h-36 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center shadow-sm">
-          <img
-            src={value}
-            alt="Product preview"
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-              setError('Failed to load image preview from provided URL');
-            }}
-          />
-          <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white text-xs font-medium"
-              title="Replace image"
-            >
-              Replace
-            </button>
-            <button
-              type="button"
-              onClick={handleRemove}
-              className="p-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 text-xs font-medium"
-              title="Remove image"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+        <>
+          <div className="relative group w-36 h-36 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center shadow-sm">
+            <img
+              src={value}
+              alt="Product preview"
+              className="w-full h-full object-cover cursor-pointer"
+              onClick={() => setIsZoomModalOpen(true)}
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+                setError('Failed to load image preview from provided URL');
+              }}
+            />
+            <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsZoomModalOpen(true)}
+                className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white text-xs font-medium cursor-pointer"
+                title="View full screen"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white text-xs font-medium cursor-pointer"
+                title="Replace image"
+              >
+                Replace
+              </button>
+              <button
+                type="button"
+                onClick={handleRemove}
+                className="p-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 text-xs font-medium cursor-pointer"
+                title="Remove image"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
+
+          <ImageModal
+            isOpen={isZoomModalOpen}
+            onClose={() => setIsZoomModalOpen(false)}
+            imageUrl={value}
+            title={label}
+          />
+        </>
       ) : mode === 'upload' ? (
         <div
           onClick={() => fileInputRef.current?.click()}

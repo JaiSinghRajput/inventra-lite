@@ -18,10 +18,12 @@ import {
 import { lookupPosItemsFn, checkoutBillFn } from '../../../features/billing/server';
 import { listCustomersFn } from '../../../features/customers/server';
 import { formatINR, inrToPaise, paiseToINR } from '../../../lib/currency';
+import { formatQuantity, parseCleanQuantity } from '../../../lib/quantity';
 import { CHARGE_TYPES, CHARGE_LABELS, type ChargeType, type PaymentMethod } from '../../../lib/constants';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Modal } from '../../../components/ui/modal';
+import { ImageModal } from '../../../components/ui/image-modal';
 import { Badge } from '../../../components/ui/badge';
 import { Card } from '../../../components/ui/card';
 
@@ -73,6 +75,9 @@ function PosComponent() {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [completedBill, setCompletedBill] = useState<{ billId: string; billNumber: string; grandTotal: number; items: CartItem[]; payments: PaymentEntry[]; charges: CartCharge[] } | null>(null);
+
+  // Full-screen image preview lightbox
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string; subtitle?: string } | null>(null);
 
   // New Charge form
   const [newChargeType, setNewChargeType] = useState<ChargeType>('labour');
@@ -129,13 +134,13 @@ function PosComponent() {
   // Add Item to Cart
   const addToCart = (product: any) => {
     const existingIndex = cart.findIndex((i) => i.productId === product.id);
-    const available = parseFloat(product.stockQuantity);
+    const available = parseCleanQuantity(product.stockQuantity);
 
     if (existingIndex > -1) {
       const existing = cart[existingIndex];
       const newQty = existing.quantity + 1;
       if (newQty > available) {
-        alert(`Cannot add more. Only ${available} ${product.unit} in stock.`);
+        alert(`Cannot add more. Only ${formatQuantity(available)} ${product.unit} in stock.`);
         return;
       }
       const updated = [...cart];
@@ -146,8 +151,8 @@ function PosComponent() {
       };
       setCart(updated);
     } else {
-      if (available < 1) {
-        alert(`Product is out of stock (${available} ${product.unit}).`);
+      if (available <= 0) {
+        alert(`Product is out of stock (${formatQuantity(available)} ${product.unit}).`);
         return;
       }
       const unitPrice = Number(product.sellingPrice);
@@ -172,17 +177,34 @@ function PosComponent() {
     searchInputRef.current?.focus();
   };
 
-  // Update Cart Item Quantity
-  const updateQuantity = (index: number, qty: number) => {
+  // Update Cart Item Quantity (Direct Edit or +/-)
+  const updateQuantity = (index: number, val: number | string) => {
+    const item = cart[index];
+    if (!item) return;
+
+    let qty: number;
+    if (typeof val === 'string') {
+      const clean = val.replace(/,/g, '').trim();
+      if (clean === '') {
+        qty = 0;
+      } else {
+        qty = parseFloat(clean);
+        if (isNaN(qty)) qty = 0;
+      }
+    } else {
+      qty = val;
+    }
+
     if (qty <= 0) {
       removeFromCart(index);
       return;
     }
-    const item = cart[index];
+
     if (qty > item.availableStock) {
-      alert(`Only ${item.availableStock} ${item.unit} available in stock.`);
-      return;
+      alert(`Cannot set quantity to ${formatQuantity(qty)}. Only ${formatQuantity(item.availableStock)} ${item.unit} available in stock.`);
+      qty = item.availableStock;
     }
+
     const updated = [...cart];
     updated[index] = {
       ...item,
@@ -367,11 +389,25 @@ function PosComponent() {
               >
                 <div className="flex items-center gap-3 min-w-0 pr-3">
                   {product.imageUrl ? (
-                    <img
-                      src={product.imageUrl}
-                      alt={product.name}
-                      className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0 bg-slate-100"
-                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewImage({
+                          url: product.imageUrl,
+                          title: product.name,
+                          subtitle: `${product.sku} • Available: ${formatQuantity(product.stockQuantity)} ${product.unit}`,
+                        });
+                      }}
+                      className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100 hover:opacity-80 transition-opacity cursor-pointer"
+                      title="Click to view full photo"
+                    >
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
                   ) : (
                     <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
                       <Package className="w-5 h-5" />
@@ -386,7 +422,7 @@ function PosComponent() {
                           <Barcode className="w-3 h-3" /> {product.barcode}
                         </span>
                       )}
-                      <span>• Stock: {product.stockQuantity} {product.unit}</span>
+                      <span>• Stock: {formatQuantity(product.stockQuantity)} {product.unit}</span>
                     </div>
                   </div>
                 </div>
@@ -444,11 +480,24 @@ function PosComponent() {
               >
                 <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-2">
                   {item.imageUrl ? (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0 bg-white"
-                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPreviewImage({
+                          url: item.imageUrl!,
+                          title: item.name,
+                          subtitle: `${item.sku} • In Cart: ${formatQuantity(item.quantity)} ${item.unit}`,
+                        })
+                      }
+                      className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-white hover:opacity-80 transition-opacity cursor-pointer"
+                      title="Click to view full photo"
+                    >
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
                   ) : (
                     <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
                       <Package className="w-4 h-4" />
@@ -462,23 +511,29 @@ function PosComponent() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                {/* Direct Quantity Edit & +/- Buttons */}
+                <div className="flex items-center gap-1">
                   <button
                     onClick={() => updateQuantity(index, item.quantity - 1)}
-                    className="w-6 h-6 rounded flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                    className="w-6 h-6 rounded flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer active:scale-95"
+                    title="Decrease by 1"
                   >
                     <Minus className="w-3 h-3" />
                   </button>
                   <input
-                    type="number"
-                    min="1"
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.,]?[0-9]*"
                     value={item.quantity}
-                    onChange={(e) => updateQuantity(index, parseFloat(e.target.value) || 0)}
-                    className="w-12 h-6 text-center text-xs font-semibold border border-slate-200 rounded bg-white"
+                    onChange={(e) => updateQuantity(index, e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    className="w-12 h-6 text-center text-xs font-bold border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-inner"
+                    title="Direct quantity edit (replaces existing)"
                   />
                   <button
                     onClick={() => updateQuantity(index, item.quantity + 1)}
-                    className="w-6 h-6 rounded flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                    className="w-6 h-6 rounded flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer active:scale-95"
+                    title="Increase by 1"
                   >
                     <Plus className="w-3 h-3" />
                   </button>
@@ -891,6 +946,15 @@ function PosComponent() {
           </div>
         </Modal>
       )}
+
+      {/* FULL-SCREEN IMAGE LIGHTBOX MODAL */}
+      <ImageModal
+        isOpen={!!previewImage}
+        onClose={() => setPreviewImage(null)}
+        imageUrl={previewImage?.url}
+        title={previewImage?.title}
+        subtitle={previewImage?.subtitle}
+      />
     </div>
   );
 }

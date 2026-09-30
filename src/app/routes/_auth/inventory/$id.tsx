@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
-import { ArrowLeft, Clock, History, Edit2, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { ArrowLeft, Clock, History, Edit2, SlidersHorizontal, Trash2, Eye } from 'lucide-react';
 import { getProductDetailsFn, updateProductFn, adjustStockFn, deleteProductFn } from '../../../../features/inventory/server';
 import { getViewerFn } from '../../../../features/auth/server';
 import { formatINR, inrToPaise, paiseToINR } from '../../../../lib/currency';
+import { formatQuantity, parseCleanQuantity } from '../../../../lib/quantity';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
 import { Badge } from '../../../../components/ui/badge';
 import { Card } from '../../../../components/ui/card';
-import { Modal } from '../../../../components/ui/modal';
+import { ImageModal } from '../../../../components/ui/image-modal';
+import { StockAdjustmentModal } from '../../../../components/inventory/stock-adjustment-modal';
 import { ImageUpload } from '../../../../components/ui/image-upload';
 
 export const Route = createFileRoute('/_auth/inventory/$id')({
@@ -21,6 +23,8 @@ export const Route = createFileRoute('/_auth/inventory/$id')({
   },
   component: ProductDetailComponent,
 });
+
+const COMMON_UNITS = ['pcs', 'kg', 'g', 'mtr', 'box', 'pkt', 'ltr', 'pair', 'set'];
 
 function ProductDetailComponent() {
   const router = useRouter();
@@ -42,7 +46,7 @@ function ProductDetailComponent() {
   const [sellingPriceINR, setSellingPriceINR] = useState(paiseToINR(product.sellingPrice).toString());
   const [purchasePriceINR, setPurchasePriceINR] = useState(paiseToINR(product.purchasePrice).toString());
   const [unit, setUnit] = useState(product.unit);
-  const [lowStockThreshold, setLowStockThreshold] = useState(product.lowStockThreshold || '');
+  const [lowStockThreshold, setLowStockThreshold] = useState(product.lowStockThreshold ? formatQuantity(product.lowStockThreshold) : '');
   const [category, setCategory] = useState(product.category || '');
   const [barcode, setBarcode] = useState(product.barcode || '');
   const [features, setFeatures] = useState(product.features || '');
@@ -54,16 +58,25 @@ function ProductDetailComponent() {
 
   // Stock Adjustment
   const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
-  const [adjustmentDelta, setAdjustmentDelta] = useState('');
-  const [adjustmentReason, setAdjustmentReason] = useState('');
   const [isAdjusting, setIsAdjusting] = useState(false);
-  const [adjustError, setAdjustError] = useState('');
+
+  // Full-screen Image Preview Modal
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) {
+      setSaveError('Product name is required');
+      return;
+    }
     const sellingPrice = inrToPaise(sellingPriceINR);
     if (sellingPrice <= 0) {
-      setSaveError('Selling price must be greater than 0');
+      setSaveError('Selling price must be greater than ₹0.00');
+      return;
+    }
+
+    if (lowStockThreshold.trim() && parseCleanQuantity(lowStockThreshold, true) < 0) {
+      setSaveError('Low stock threshold cannot be negative');
       return;
     }
 
@@ -77,8 +90,8 @@ function ProductDetailComponent() {
           name: name.trim(),
           sellingPrice,
           purchasePrice: purchasePriceINR ? inrToPaise(purchasePriceINR) : 0,
-          unit: unit.trim() || 'unit',
-          lowStockThreshold: lowStockThreshold.trim() ? parseFloat(lowStockThreshold) : null,
+          unit: unit.trim().toLowerCase() || 'pcs',
+          lowStockThreshold: lowStockThreshold.trim() ? parseCleanQuantity(lowStockThreshold) : null,
           category: category.trim() || undefined,
           barcode: barcode.trim() || undefined,
           features: features.trim() || undefined,
@@ -96,43 +109,26 @@ function ProductDetailComponent() {
     }
   };
 
-  const handleAdjustSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const delta = parseFloat(adjustmentDelta);
-    if (isNaN(delta) || delta === 0) {
-      setAdjustError('Please specify a valid non-zero adjustment delta');
-      return;
-    }
-    if (!adjustmentReason.trim()) {
-      setAdjustError('Reason is required');
-      return;
-    }
-
-    setAdjustError('');
+  const handleAdjustSubmit = async (productId: string, delta: number, reason: string) => {
     setIsAdjusting(true);
-
     try {
       await adjustStockFn({
         data: {
-          productId: product.id,
+          productId,
           delta,
-          reason: adjustmentReason.trim(),
+          reason,
         },
       });
 
       setIsAdjustModalOpen(false);
-      setAdjustmentDelta('');
-      setAdjustmentReason('');
       router.invalidate();
-    } catch (err: any) {
-      setAdjustError(err?.message || 'Adjustment failed');
     } finally {
       setIsAdjusting(false);
     }
   };
 
-  const stock = parseFloat(product.stockQuantity);
-  const threshold = product.lowStockThreshold ? parseFloat(product.lowStockThreshold) : null;
+  const stock = parseCleanQuantity(product.stockQuantity);
+  const threshold = product.lowStockThreshold ? parseCleanQuantity(product.lowStockThreshold) : null;
   const isLow = threshold !== null && stock <= threshold;
   const isOwner = data?.viewer?.user?.role === 'OWNER';
 
@@ -155,9 +151,17 @@ function ProductDetailComponent() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           {product.imageUrl && (
-            <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
-              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsImageModalOpen(true)}
+              className="group relative w-12 h-12 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500"
+              title="Click to view full photo"
+            >
+              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200" />
+              <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                <Eye className="w-3.5 h-3.5" />
+              </div>
+            </button>
           )}
           <div>
             <div className="flex items-center gap-2">
@@ -201,7 +205,7 @@ function ProductDetailComponent() {
         <Card className="text-center p-3 sm:p-4">
           <span className="text-[11px] text-slate-500 font-semibold uppercase">Physical Stock</span>
           <p className={`text-xl font-extrabold mt-1 ${isLow ? 'text-amber-600' : 'text-slate-900'}`}>
-            {product.stockQuantity} <span className="text-xs font-normal text-slate-500">{product.unit}</span>
+            {formatQuantity(product.stockQuantity)} <span className="text-xs font-normal text-slate-500">{product.unit}</span>
           </p>
           {isLow && <span className="text-[10px] text-amber-600 font-bold">Low Stock Warning</span>}
         </Card>
@@ -362,10 +366,10 @@ function ProductDetailComponent() {
                         </Badge>
                       </td>
                       <td className={`py-2.5 px-4 font-bold ${isPositive ? 'text-emerald-600' : 'text-slate-800'}`}>
-                        {isPositive ? `+${m.quantityDelta}` : m.quantityDelta} {product.unit}
+                        {isPositive ? `+${formatQuantity(m.quantityDelta)}` : formatQuantity(m.quantityDelta)} {product.unit}
                       </td>
                       <td className="py-2.5 px-4 font-bold text-slate-900">
-                        {m.balanceAfter} {product.unit}
+                        {formatQuantity(m.balanceAfter)} {product.unit}
                       </td>
                       <td className="py-2.5 px-4 text-slate-600 font-sans text-xs">
                         {m.reason || m.referenceId || '—'}
@@ -379,46 +383,23 @@ function ProductDetailComponent() {
         )}
       </div>
 
-      {/* ADJUST MODAL */}
-      {isAdjustModalOpen && (
-        <Modal
-          isOpen={true}
-          onClose={() => setIsAdjustModalOpen(false)}
-          title={`Adjust Stock for ${product.name}`}
-          description={`Current: ${product.stockQuantity} ${product.unit}. Enter physical count adjustment.`}
-        >
-          <form onSubmit={handleAdjustSubmit} className="space-y-4">
-            {adjustError && (
-              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
-                {adjustError}
-              </div>
-            )}
+      {/* STOCK ADJUSTMENT MODAL (DIRECT & DELTA SUPPORT) */}
+      <StockAdjustmentModal
+        isOpen={isAdjustModalOpen}
+        onClose={() => setIsAdjustModalOpen(false)}
+        product={product}
+        onConfirm={handleAdjustSubmit}
+        isLoading={isAdjusting}
+      />
 
-            <Input
-              label="Quantity Delta (+ to add, - to subtract)"
-              type="number"
-              step="0.001"
-              placeholder="e.g. +5 or -2"
-              value={adjustmentDelta}
-              onChange={(e) => setAdjustmentDelta(e.target.value)}
-              required
-              autoFocus
-            />
-
-            <Input
-              label="Audit Reason *"
-              placeholder="e.g. Damaged inventory write-off, count correction"
-              value={adjustmentReason}
-              onChange={(e) => setAdjustmentReason(e.target.value)}
-              required
-            />
-
-            <Button type="submit" isLoading={isAdjusting} className="w-full">
-              Confirm Adjustment
-            </Button>
-          </form>
-        </Modal>
-      )}
+      {/* FULL-SCREEN IMAGE LIGHTBOX MODAL */}
+      <ImageModal
+        isOpen={isImageModalOpen}
+        onClose={() => setIsImageModalOpen(false)}
+        imageUrl={product.imageUrl}
+        title={product.name}
+        subtitle={`${product.sku}${product.barcode ? ` • ${product.barcode}` : ''}`}
+      />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
 import { getDailySalesSummaryFn, getLowStockAlertsFn } from '../../../features/reports/server';
 import { listBillsFn } from '../../../features/billing/server';
 import { formatINR } from '../../../lib/currency';
+import { formatQuantity } from '../../../lib/quantity';
 import { Button } from '../../../components/ui/button';
 import { Card } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
@@ -206,8 +207,8 @@ function DashboardComponent() {
                     <div className="text-[11px] text-slate-400 font-mono">{item.sku}</div>
                   </div>
                   <div className="text-right">
-                    <span className="font-extrabold text-rose-600">{item.stockQuantity} {item.unit}</span>
-                    <div className="text-[10px] text-slate-400">Threshold: {item.lowStockThreshold}</div>
+                    <span className="font-extrabold text-rose-600">{formatQuantity(item.stockQuantity)} {item.unit}</span>
+                    <div className="text-[10px] text-slate-400">Threshold: {formatQuantity(item.lowStockThreshold)}</div>
                   </div>
                 </div>
               ))}

@@ -21,8 +21,53 @@ function RegisterComponent() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Check URL query parameters for OAuth error
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlError = params.get('error') || params.get('error_description') || params.get('message');
+      if (urlError) {
+        if (urlError.toLowerCase().includes('access_denied')) {
+          setError('Google sign-up was cancelled. Please try again.');
+        } else if (urlError.toLowerCase().includes('redirect_uri_mismatch')) {
+          setError('OAuth redirect URI mismatch. Please ensure this origin is added to Authorized Redirect URIs in Google Cloud Console.');
+        } else {
+          setError(`Sign-up error: ${urlError}`);
+        }
+      }
+    }
+  }, []);
+
+  const validateForm = () => {
+    if (!storeName.trim()) {
+      setError('Please enter your store or business name.');
+      return false;
+    }
+    if (!ownerName.trim()) {
+      setError('Please enter your full name as store owner.');
+      return false;
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setError('Please enter an email address.');
+      return false;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid email address.');
+      return false;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
+
     setError('');
     setLoading(true);
 
@@ -37,13 +82,14 @@ function RegisterComponent() {
         },
       });
 
-      // Automatically sign in with the new credentials
+      // Automatically sign in with the new credentials (persist session)
       const signInRes = await authClient.signIn.email({
         email: email.trim().toLowerCase(),
         password,
+        rememberMe: true,
       });
 
-      if (signInRes.error) {
+      if (signInRes?.error) {
         navigate({ to: '/login' });
       } else {
         navigate({ to: '/pos' });
@@ -59,12 +105,16 @@ function RegisterComponent() {
     setError('');
     setLoading(true);
     try {
-      await authClient.signIn.social({
+      const res = await authClient.signIn.social({
         provider: 'google',
         callbackURL: '/pos',
       });
+      if (res?.error) {
+        setError(res.error.message || 'Google sign up failed. Please try again.');
+        setLoading(false);
+      }
     } catch (err: any) {
-      setError(err?.message || 'Google sign up failed');
+      setError(err?.message || 'Google sign up failed. Please verify your connection.');
       setLoading(false);
     }
   };
