@@ -2,11 +2,11 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../../server/db';
 import { tenantMemberships, user, tenants, auditLogs } from '../../server/db/schema';
 import { generateId } from '../../server/utils/id';
-import { enforceOwner, type TenantContext, type Role } from '../auth/middleware';
+import { enforceOwner, enforceManagerOrOwner, type TenantContext, type Role } from '../auth/middleware';
 
 export class StaffService {
   static async listStaff(context: TenantContext) {
-    enforceOwner(context);
+    enforceManagerOrOwner(context);
 
     const members = await db
       .select({

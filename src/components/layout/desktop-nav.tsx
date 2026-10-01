@@ -27,14 +27,26 @@ const navItems: NavItem[] = [
   { to: '/settings/users', label: 'Staff & Roles', icon: Users },
 ];
 
-export const DesktopNav: React.FC = () => {
+interface DesktopNavProps {
+  role?: string;
+}
+
+export const DesktopNav: React.FC<DesktopNavProps> = ({ role }) => {
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+
+  const filteredNavItems = navItems.filter((item) => {
+    if (role === 'CASHIER') {
+      // Cashiers only access Billing, Inventory, Bills, Customers
+      return !['/purchases', '/reports', '/settings/store', '/settings/users'].includes(item.to);
+    }
+    return true;
+  });
 
   return (
     <aside className="hidden md:flex flex-col w-60 bg-white border-r border-slate-200 h-[calc(100vh-3.5rem)] sticky top-14">
       <nav className="p-3 space-y-1 overflow-y-auto flex-1">
-        {navItems.map((item) => {
+        {filteredNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPath === item.to || currentPath.startsWith(item.to + '/');
 

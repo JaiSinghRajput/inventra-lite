@@ -84,7 +84,7 @@ describe('Server-Side Billing Invariants & Currency Utilities', () => {
   });
 
   it('enforces RBAC deletion rules: only OWNER can delete products & customers, MANAGER cannot', async () => {
-    const { canDeleteInventoryOrCustomer, canDeleteProduct, canDeleteCustomer } = await import('../../src/lib/permissions');
+    const { canDeleteInventoryOrCustomer, canDeleteProduct, canDeleteCustomer, canManageStaff } = await import('../../src/lib/permissions');
 
     expect(canDeleteInventoryOrCustomer('OWNER')).toBe(true);
     expect(canDeleteInventoryOrCustomer('MANAGER')).toBe(false);
@@ -94,6 +94,10 @@ describe('Server-Side Billing Invariants & Currency Utilities', () => {
     expect(canDeleteProduct('MANAGER')).toBe(false);
     expect(canDeleteCustomer('OWNER')).toBe(true);
     expect(canDeleteCustomer('MANAGER')).toBe(false);
+
+    expect(canManageStaff('OWNER')).toBe(true);
+    expect(canManageStaff('MANAGER')).toBe(false);
+    expect(canManageStaff('CASHIER')).toBe(false);
   });
 
   it('correctly extracts Cloudinary public_id from various Cloudinary URL formats and rejects non-Cloudinary URLs', async () => {
