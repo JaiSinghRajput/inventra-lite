@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { Users, UserPlus, Shield, UserCheck, UserX, Trash2, Mail, Clock } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Users, UserPlus, Shield, UserCheck, UserX, Trash2, Mail, Clock, RefreshCw } from 'lucide-react';
 import {
   listStaffFn,
   addStaffFn,
@@ -18,7 +19,7 @@ export const Route = createFileRoute('/_auth/settings/users')({
 });
 
 function UsersSettingsComponent() {
-  const [staff, setStaff] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'OWNER' | 'MANAGER' | 'CASHIER'>('CASHIER');
@@ -26,22 +27,20 @@ function UsersSettingsComponent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const loadStaff = async () => {
-    try {
-      const data = await listStaffFn();
-      setStaff(data);
-    } catch (err: any) {
-      console.error(err);
-      setError(err?.message || 'Failed to load staff list');
-    }
-  };
-
-  useEffect(() => {
-    loadStaff();
-  }, []);
+  const {
+    data: staff = [],
+    isLoading: isStaffLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['settings', 'staff'],
+    queryFn: () => listStaffFn(),
+    staleTime: 30000,
+  });
 
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     setError('');
     setIsLoading(true);
 
@@ -56,7 +55,7 @@ function UsersSettingsComponent() {
       setIsAddModalOpen(false);
       setEmail('');
       setRole('CASHIER');
-      loadStaff();
+      await queryClient.invalidateQueries({ queryKey: ['settings', 'staff'] });
     } catch (err: any) {
       setError(err?.message || 'Failed to add staff member');
     } finally {
@@ -67,7 +66,7 @@ function UsersSettingsComponent() {
   const handleToggle = async (membershipId: string, currentStatus: boolean) => {
     try {
       await toggleStaffStatusFn({ data: { membershipId, isActive: !currentStatus } });
-      loadStaff();
+      await queryClient.invalidateQueries({ queryKey: ['settings', 'staff'] });
     } catch (err: any) {
       alert(err?.message || 'Failed to toggle status');
     }
@@ -76,7 +75,7 @@ function UsersSettingsComponent() {
   const handleRoleChange = async (membershipId: string, newRole: 'OWNER' | 'MANAGER' | 'CASHIER') => {
     try {
       await updateStaffRoleFn({ data: { membershipId, role: newRole } });
-      loadStaff();
+      await queryClient.invalidateQueries({ queryKey: ['settings', 'staff'] });
     } catch (err: any) {
       alert(err?.message || 'Failed to update role');
     }
@@ -86,7 +85,7 @@ function UsersSettingsComponent() {
     if (!confirm(`Are you sure you want to remove ${staffEmail} from this store?`)) return;
     try {
       await removeStaffFn({ data: { membershipId } });
-      loadStaff();
+      await queryClient.invalidateQueries({ queryKey: ['settings', 'staff'] });
     } catch (err: any) {
       alert(err?.message || 'Failed to remove staff member');
     }

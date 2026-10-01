@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, PackagePlus } from 'lucide-react';
 import { createProductFn } from '../../../../features/inventory/server';
 import { inrToPaise } from '../../../../lib/currency';
@@ -17,6 +18,7 @@ const COMMON_UNITS = ['pcs', 'kg', 'g', 'mtr', 'box', 'pkt', 'ltr', 'pair', 'set
 
 function NewProductComponent() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [name, setName] = useState('');
   const [sellingPriceINR, setSellingPriceINR] = useState('');
@@ -87,6 +89,7 @@ function NewProductComponent() {
     const stockQty = parseCleanQuantity(initialStock);
     const threshold = lowStockThreshold.trim() ? parseCleanQuantity(lowStockThreshold) : null;
 
+    if (loading) return;
     setError('');
     setLoading(true);
 
@@ -105,6 +108,9 @@ function NewProductComponent() {
           imageUrl: imageUrl.trim() || undefined,
         },
       });
+
+      await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
 
       navigate({ to: '/inventory' });
     } catch (err: any) {

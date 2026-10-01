@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2, Truck } from 'lucide-react';
 import { listProductsFn } from '../../../../features/inventory/server';
 import { recordStockInFn } from '../../../../features/purchases/server';
@@ -22,8 +23,8 @@ interface StockInLine {
 
 function NewPurchaseComponent() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const [products, setProducts] = useState<any[]>([]);
   const [referenceInvoice, setReferenceInvoice] = useState('');
   const [supplierName, setSupplierName] = useState('');
   const [notes, setNotes] = useState('');
@@ -34,12 +35,17 @@ function NewPurchaseComponent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const { data: products = [] } = useQuery({
+    queryKey: ['inventory', {}],
+    queryFn: () => listProductsFn({ data: {} }),
+    staleTime: 30000,
+  });
+
   useEffect(() => {
-    listProductsFn().then((data) => {
-      setProducts(data);
-      if (data.length > 0) setSelectedProductId(data[0].id);
-    });
-  }, []);
+    if (products.length > 0 && !selectedProductId) {
+      setSelectedProductId(products[0].id);
+    }
+  }, [products, selectedProductId]);
 
   const addLine = () => {
     const prod = products.find((p) => p.id === selectedProductId);
@@ -74,6 +80,7 @@ function NewPurchaseComponent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (lines.length === 0) {
       setError('Please add at least one product item to restock');
       return;
@@ -103,6 +110,10 @@ function NewPurchaseComponent() {
           })),
         },
       });
+
+      await queryClient.invalidateQueries({ queryKey: ['purchases'] });
+      await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
 
       navigate({ to: '/purchases' });
     } catch (err: any) {

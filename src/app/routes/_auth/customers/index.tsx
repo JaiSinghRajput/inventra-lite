@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Users, Plus, Search, Phone, Mail, ArrowUpRight } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Users, Plus, Search, Phone, Mail, ArrowUpRight, RefreshCw } from 'lucide-react';
 import { listCustomersFn, createCustomerFn } from '../../../../features/customers/server';
 import { formatINR } from '../../../../lib/currency';
 import { Button } from '../../../../components/ui/button';
@@ -14,9 +15,8 @@ export const Route = createFileRoute('/_auth/customers/')({
 });
 
 function CustomersListComponent() {
-  const [customers, setCustomers] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
 
   // New Customer Modal
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -27,24 +27,20 @@ function CustomersListComponent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  const loadCustomers = async () => {
-    setIsLoading(true);
-    try {
-      const data = await listCustomersFn({ data: { search: search.trim() || undefined } });
-      setCustomers(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadCustomers();
-  }, [search]);
+  const {
+    data: customers = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['customers', { search: search.trim() || undefined }],
+    queryFn: () => listCustomersFn({ data: { search: search.trim() || undefined } }),
+    staleTime: 30000,
+  });
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!newName.trim()) return;
 
     setCreateError('');
@@ -65,7 +61,7 @@ function CustomersListComponent() {
       setNewPhone('');
       setNewEmail('');
       setNewAddress('');
-      loadCustomers();
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
     } catch (err: any) {
       setCreateError(err?.message || 'Failed to add customer');
     } finally {
@@ -98,6 +94,15 @@ function CustomersListComponent() {
           />
         </div>
       </div>
+
+      {isError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-700">
+          <span>Failed to load customer list.</span>
+          <Button size="sm" variant="outline" onClick={() => refetch()} className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-100">
+            <RefreshCw className="w-3 h-3 mr-1" /> Retry
+          </Button>
+        </div>
+      )}
 
       {/* Customers List Table */}
       {isLoading ? (

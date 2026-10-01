@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Receipt, Search, Filter, Eye } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Receipt, Search, Filter, Eye, RefreshCw } from 'lucide-react';
 import { listBillsFn } from '../../../../features/billing/server';
 import { formatINR } from '../../../../lib/currency';
 import { Badge } from '../../../../components/ui/badge';
+import { Button } from '../../../../components/ui/button';
 import { EmptyState } from '../../../../components/feedback/empty-state';
 import { SkeletonTable } from '../../../../components/feedback/skeleton-table';
 
@@ -12,31 +14,25 @@ export const Route = createFileRoute('/_auth/billing/')({
 });
 
 function BillingListComponent() {
-  const [bills, setBills] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'completed' | 'cancelled' | undefined>();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<'unpaid' | 'partial' | 'paid' | undefined>();
 
-  const loadBills = async () => {
-    setIsLoading(true);
-    try {
-      const data = await listBillsFn({
+  const {
+    data: bills = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['billing', { status: statusFilter, paymentStatus: paymentStatusFilter }],
+    queryFn: () =>
+      listBillsFn({
         data: {
           status: statusFilter,
           paymentStatus: paymentStatusFilter,
         },
-      });
-      setBills(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadBills();
-  }, [statusFilter, paymentStatusFilter]);
+      }),
+    staleTime: 30000,
+  });
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto w-full">
@@ -105,6 +101,15 @@ function BillingListComponent() {
           Cancelled
         </button>
       </div>
+
+      {isError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-700">
+          <span>Failed to load invoices.</span>
+          <Button size="sm" variant="outline" onClick={() => refetch()} className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-100">
+            <RefreshCw className="w-3 h-3 mr-1" /> Retry
+          </Button>
+        </div>
+      )}
 
       {/* Bills Table */}
       {isLoading ? (

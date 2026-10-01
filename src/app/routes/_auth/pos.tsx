@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Search,
   Plus,
@@ -61,6 +62,7 @@ function generateClientUuid() {
 }
 
 function PosComponent() {
+  const queryClient = useQueryClient();
   // POS State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -124,11 +126,19 @@ function PosComponent() {
 
   // Load customers when modal opens
   useEffect(() => {
+    let isCancelled = false;
     if (isCustomerModalOpen) {
-      listCustomersFn({ data: { search: customerSearch } }).then((res) => {
-        setCustomerList(res);
-      });
+      listCustomersFn({ data: { search: customerSearch } })
+        .then((res) => {
+          if (!isCancelled) setCustomerList(res);
+        })
+        .catch((err) => {
+          console.warn('[POS] Failed to search customers:', err);
+        });
     }
+    return () => {
+      isCancelled = true;
+    };
   }, [isCustomerModalOpen, customerSearch]);
 
   // Add Item to Cart
@@ -300,6 +310,7 @@ function PosComponent() {
 
   // Submit Checkout Mutation
   const handleFinalizeBill = async () => {
+    if (isSubmitting) return;
     setCheckoutError('');
 
     if (dueAmount > 0 && !selectedCustomer) {
@@ -342,6 +353,12 @@ function PosComponent() {
         payments: [...payments],
         charges: [...charges],
       });
+
+      // Invalidate relevant queries so other pages have fresh data
+      await queryClient.invalidateQueries({ queryKey: ['billing'] });
+      await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
 
       // Reset cart and generate new idempotency key
       setCart([]);

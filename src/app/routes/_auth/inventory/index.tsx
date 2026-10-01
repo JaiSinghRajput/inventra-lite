@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Plus, Search, Filter, AlertTriangle, ArrowUpDown, SlidersHorizontal, Package, Eye } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, Search, Filter, AlertTriangle, ArrowUpDown, SlidersHorizontal, Package, Eye, RefreshCw } from 'lucide-react';
 import { listProductsFn, adjustStockFn } from '../../../../features/inventory/server';
 import { formatINR, paiseToINR } from '../../../../lib/currency';
 import { formatQuantity } from '../../../../lib/quantity';
@@ -17,8 +18,7 @@ export const Route = createFileRoute('/_auth/inventory/')({
 });
 
 function InventoryListComponent() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
 
@@ -29,28 +29,26 @@ function InventoryListComponent() {
   // Image Preview Modal
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; subtitle?: string } | null>(null);
 
-  const loadProducts = async () => {
-    setIsLoading(true);
-    try {
-      const data = await listProductsFn({
+  const {
+    data: products = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['inventory', { search: search.trim() || undefined, lowStockOnly: lowStockOnly || undefined }],
+    queryFn: () =>
+      listProductsFn({
         data: {
           search: search.trim() || undefined,
           lowStockOnly: lowStockOnly ? true : undefined,
         },
-      });
-      setProducts(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadProducts();
-  }, [search, lowStockOnly]);
+      }),
+    staleTime: 30000,
+  });
 
   const handleAdjustConfirm = async (productId: string, delta: number, reason: string) => {
+    if (isAdjusting) return;
     setIsAdjusting(true);
     try {
       await adjustStockFn({
@@ -61,7 +59,11 @@ function InventoryListComponent() {
         },
       });
       setSelectedProduct(null);
-      await loadProducts();
+      await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
+    } catch (err: any) {
+      console.error('[AdjustStockError]', err);
+      alert(err?.message || 'Failed to adjust stock. Please try again.');
     } finally {
       setIsAdjusting(false);
     }
@@ -108,6 +110,15 @@ function InventoryListComponent() {
         </button>
       </div>
 
+      {isError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-700">
+          <span>Failed to load inventory items.</span>
+          <Button size="sm" variant="outline" onClick={() => refetch()} className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-100">
+            <RefreshCw className="w-3 h-3 mr-1" /> Retry
+          </Button>
+        </div>
+      )}
+
       {/* Product List Table */}
       {isLoading ? (
         <SkeletonTable rows={6} />
@@ -144,7 +155,7 @@ function InventoryListComponent() {
                           {p.imageUrl ? (
                             <button
                               type="button"
-                              onClick={() => setPreviewImage({ url: p.imageUrl, title: p.name, subtitle: `${p.sku}${p.barcode ? ` • ${p.barcode}` : ''}` })}
+                              onClick={() => setPreviewImage({ url: p.imageUrl!, title: p.name, subtitle: `${p.sku}${p.barcode ? ` • ${p.barcode}` : ''}` })}
                               className="group relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500"
                               title="Click to view full image"
                             >

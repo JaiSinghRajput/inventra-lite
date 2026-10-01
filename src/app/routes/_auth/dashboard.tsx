@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import {
   Calculator,
   Package,
@@ -9,6 +10,7 @@ import {
   AlertTriangle,
   ArrowRight,
   TrendingUp,
+  RefreshCw,
 } from 'lucide-react';
 import { getDailySalesSummaryFn, getLowStockAlertsFn } from '../../../features/reports/server';
 import { listBillsFn } from '../../../features/billing/server';
@@ -23,21 +25,45 @@ export const Route = createFileRoute('/_auth/dashboard')({
 });
 
 function DashboardComponent() {
-  const [summary, setSummary] = useState<any>(null);
-  const [lowStock, setLowStock] = useState<any[]>([]);
-  const [recentBills, setRecentBills] = useState<any[]>([]);
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+    refetch: refetchSummary,
+  } = useQuery({
+    queryKey: ['reports', 'daily'],
+    queryFn: () => getDailySalesSummaryFn(),
+    staleTime: 30000,
+  });
 
-  useEffect(() => {
-    Promise.all([
-      getDailySalesSummaryFn(),
-      getLowStockAlertsFn(),
-      listBillsFn(),
-    ]).then(([sum, low, bills]) => {
-      setSummary(sum);
-      setLowStock(low.slice(0, 5));
-      setRecentBills(bills.slice(0, 5));
-    });
-  }, []);
+  const {
+    data: lowStockRaw,
+    isLoading: isLowStockLoading,
+    refetch: refetchLowStock,
+  } = useQuery({
+    queryKey: ['reports', 'low-stock'],
+    queryFn: () => getLowStockAlertsFn(),
+    staleTime: 30000,
+  });
+
+  const {
+    data: billsRaw,
+    isLoading: isBillsLoading,
+    refetch: refetchBills,
+  } = useQuery({
+    queryKey: ['billing'],
+    queryFn: () => listBillsFn(),
+    staleTime: 30000,
+  });
+
+  const lowStock = (lowStockRaw || []).slice(0, 5);
+  const recentBills = (billsRaw || []).slice(0, 5);
+
+  const handleRetryAll = () => {
+    refetchSummary();
+    refetchLowStock();
+    refetchBills();
+  };
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto w-full">
@@ -55,6 +81,15 @@ function DashboardComponent() {
           </Button>
         </Link>
       </div>
+
+      {isSummaryError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-700">
+          <span>Failed to load fresh dashboard metrics. Cached data may be shown.</span>
+          <Button size="sm" variant="outline" onClick={handleRetryAll} className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-100">
+            <RefreshCw className="w-3 h-3 mr-1" /> Retry
+          </Button>
+        </div>
+      )}
 
       {/* Quick Actions Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -158,7 +193,7 @@ function DashboardComponent() {
                   key={b.id}
                   to="/billing/$id"
                   params={{ id: b.id }}
-                  className="p-3 flex items-center justify-between hover:bg-slate-50 transition-colors block"
+                  className="p-3 items-center justify-between hover:bg-slate-50 transition-colors block"
                 >
                   <div>
                     <span className="font-mono font-bold text-slate-900">{b.billNumber}</span>

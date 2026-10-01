@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { BarChart3, AlertTriangle, Calendar, ArrowRight, DollarSign } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { BarChart3, AlertTriangle, Calendar, ArrowRight, DollarSign, RefreshCw } from 'lucide-react';
 import { getDailySalesSummaryFn, getLowStockAlertsFn } from '../../../../features/reports/server';
 import { formatINR } from '../../../../lib/currency';
 import { formatQuantity } from '../../../../lib/quantity';
@@ -14,21 +15,36 @@ export const Route = createFileRoute('/_auth/reports/')({
 
 function ReportsComponent() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [summary, setSummary] = useState<any>(null);
-  const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    setIsLoading(true);
-    Promise.all([
-      getDailySalesSummaryFn({ data: { date: selectedDate } }),
-      getLowStockAlertsFn(),
-    ]).then(([sum, low]) => {
-      setSummary(sum);
-      setLowStockProducts(low);
-      setIsLoading(false);
-    });
-  }, [selectedDate]);
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+    refetch: refetchSummary,
+  } = useQuery({
+    queryKey: ['reports', 'daily', selectedDate],
+    queryFn: () => getDailySalesSummaryFn({ data: { date: selectedDate } }),
+    staleTime: 30000,
+  });
+
+  const {
+    data: lowStockProducts = [],
+    isLoading: isLowStockLoading,
+    isError: isLowStockError,
+    refetch: refetchLowStock,
+  } = useQuery({
+    queryKey: ['reports', 'low-stock'],
+    queryFn: () => getLowStockAlertsFn(),
+    staleTime: 30000,
+  });
+
+  const isLoading = isSummaryLoading || isLowStockLoading;
+  const isError = isSummaryError || isLowStockError;
+
+  const handleRetry = () => {
+    refetchSummary();
+    refetchLowStock();
+  };
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto w-full">
@@ -48,6 +64,15 @@ function ReportsComponent() {
           />
         </div>
       </div>
+
+      {isError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-700">
+          <span>Failed to load reports summary. Cached data may be shown.</span>
+          <Button size="sm" variant="outline" onClick={handleRetry} className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-100">
+            <RefreshCw className="w-3 h-3 mr-1" /> Retry
+          </Button>
+        </div>
+      )}
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

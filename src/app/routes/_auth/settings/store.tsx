@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Store, Save, Percent, FileText } from 'lucide-react';
 import { getStoreSettingsFn, updateStoreSettingsFn } from '../../../../features/settings/server';
 import { Button } from '../../../../components/ui/button';
@@ -11,7 +12,7 @@ export const Route = createFileRoute('/_auth/settings/store')({
 });
 
 function StoreSettingsComponent() {
-  const [store, setStore] = useState<any>(null);
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [defaultTaxRate, setDefaultTaxRate] = useState('0.00');
@@ -20,19 +21,23 @@ function StoreSettingsComponent() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
+  const { data: store, isLoading } = useQuery({
+    queryKey: ['settings', 'store'],
+    queryFn: () => getStoreSettingsFn(),
+    staleTime: 30000,
+  });
+
   useEffect(() => {
-    getStoreSettingsFn().then((data) => {
-      if (data) {
-        setStore(data);
-        setName(data.name);
-        setTaxEnabled(data.taxEnabled);
-        setDefaultTaxRate(data.defaultTaxRate);
-      }
-    });
-  }, []);
+    if (store) {
+      setName(store.name || '');
+      setTaxEnabled(!!store.taxEnabled);
+      setDefaultTaxRate(store.defaultTaxRate || '0.00');
+    }
+  }, [store]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
     setMessage('');
     setError('');
     setIsSaving(true);
@@ -46,6 +51,8 @@ function StoreSettingsComponent() {
         },
       });
       setMessage('Store settings updated successfully!');
+      await queryClient.invalidateQueries({ queryKey: ['settings', 'store'] });
+      await queryClient.invalidateQueries({ queryKey: ['viewer'] });
     } catch (err: any) {
       setError(err?.message || 'Failed to update settings');
     } finally {

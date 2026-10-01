@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Clock, History, Edit2, SlidersHorizontal, Trash2, Eye } from 'lucide-react';
 import { getProductDetailsFn, updateProductFn, adjustStockFn, deleteProductFn } from '../../../../features/inventory/server';
 import { getViewerFn } from '../../../../features/auth/server';
@@ -21,6 +22,18 @@ export const Route = createFileRoute('/_auth/inventory/$id')({
     ]);
     return { ...details, viewer };
   },
+  errorComponent: ({ error, reset }) => (
+    <div className="p-8 text-center max-w-md mx-auto">
+      <h3 className="text-lg font-bold text-slate-900 mb-2">Unable to load product</h3>
+      <p className="text-sm text-slate-500 mb-4">{(error as any)?.message || 'Product could not be found or network request failed.'}</p>
+      <div className="flex justify-center gap-3">
+        <Button onClick={() => reset()} size="sm">Retry</Button>
+        <Link to="/inventory">
+          <Button variant="outline" size="sm">Back to Inventory</Button>
+        </Link>
+      </div>
+    </div>
+  ),
   component: ProductDetailComponent,
 });
 
@@ -28,6 +41,7 @@ const COMMON_UNITS = ['pcs', 'kg', 'g', 'mtr', 'box', 'pkt', 'ltr', 'pair', 'set
 
 function ProductDetailComponent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const data = Route.useLoaderData();
 
   if (!data?.product) {
@@ -101,6 +115,8 @@ function ProductDetailComponent() {
       });
 
       setIsEditing(false);
+      await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
       router.invalidate();
     } catch (err: any) {
       setSaveError(err?.message || 'Failed to update product');
@@ -110,6 +126,7 @@ function ProductDetailComponent() {
   };
 
   const handleAdjustSubmit = async (productId: string, delta: number, reason: string) => {
+    if (isAdjusting) return;
     setIsAdjusting(true);
     try {
       await adjustStockFn({
@@ -121,7 +138,11 @@ function ProductDetailComponent() {
       });
 
       setIsAdjustModalOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
       router.invalidate();
+    } catch (err: any) {
+      alert(err?.message || 'Failed to adjust stock');
     } finally {
       setIsAdjusting(false);
     }
@@ -136,6 +157,8 @@ function ProductDetailComponent() {
     if (!confirm(`Are you sure you want to delete "${product.name}"? This action cannot be undone.`)) return;
     try {
       await deleteProductFn({ data: { id: product.id } });
+      await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
       router.navigate({ to: '/inventory' });
     } catch (err: any) {
       alert(err?.message || 'Failed to delete product');

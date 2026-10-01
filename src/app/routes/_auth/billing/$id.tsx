@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Printer, Ban, CreditCard, RotateCcw, AlertCircle, CheckCircle } from 'lucide-react';
 import { getBillDetailsFn, cancelBillFn } from '../../../../features/billing/server';
 import { recordSubsequentPaymentFn, reversePaymentFn } from '../../../../features/payments/server';
@@ -15,11 +16,24 @@ export const Route = createFileRoute('/_auth/billing/$id')({
   loader: async ({ params }) => {
     return await getBillDetailsFn({ data: { id: params.id } });
   },
+  errorComponent: ({ error, reset }) => (
+    <div className="p-8 text-center max-w-md mx-auto">
+      <h3 className="text-lg font-bold text-slate-900 mb-2">Invoice Not Found</h3>
+      <p className="text-sm text-slate-500 mb-4">{(error as any)?.message || 'Invoice details could not be loaded.'}</p>
+      <div className="flex justify-center gap-3">
+        <Button onClick={() => reset()} size="sm">Retry</Button>
+        <Link to="/billing">
+          <Button variant="outline" size="sm">Back to Invoices</Button>
+        </Link>
+      </div>
+    </div>
+  ),
   component: BillDetailComponent,
 });
 
 function BillDetailComponent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const data = Route.useLoaderData();
 
   if (!data?.bill) {
@@ -74,6 +88,9 @@ function BillDetailComponent() {
       });
 
       setIsPayModalOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ['billing'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
       router.invalidate();
     } catch (err: any) {
       setPayError(err?.message || 'Payment recording failed');
@@ -84,6 +101,7 @@ function BillDetailComponent() {
 
   const handleCancelBill = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isCancelling) return;
     if (!cancelReason.trim()) {
       setCancelError('Reason is required');
       return;
@@ -101,6 +119,10 @@ function BillDetailComponent() {
       });
 
       setIsCancelModalOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ['billing'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
       router.invalidate();
     } catch (err: any) {
       setCancelError(err?.message || 'Failed to cancel bill');
@@ -111,6 +133,7 @@ function BillDetailComponent() {
 
   const handleReversePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReversing) return;
     if (!selectedPayment) return;
     if (!reverseReason.trim()) {
       setReverseError('Reason is required');
@@ -130,6 +153,9 @@ function BillDetailComponent() {
 
       setSelectedPayment(null);
       setReverseReason('');
+      await queryClient.invalidateQueries({ queryKey: ['billing'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
       router.invalidate();
     } catch (err: any) {
       setReverseError(err?.message || 'Payment reversal failed');

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Truck, Plus, PackageCheck } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Truck, Plus, PackageCheck, RefreshCw } from 'lucide-react';
 import { listPurchasesFn } from '../../../../features/purchases/server';
 import { formatINR } from '../../../../lib/currency';
 import { Button } from '../../../../components/ui/button';
@@ -12,15 +13,16 @@ export const Route = createFileRoute('/_auth/purchases/')({
 });
 
 function PurchasesListComponent() {
-  const [purchases, setPurchases] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    listPurchasesFn().then((data) => {
-      setPurchases(data);
-      setIsLoading(false);
-    });
-  }, []);
+  const {
+    data: purchases = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['purchases'],
+    queryFn: () => listPurchasesFn(),
+    staleTime: 30000,
+  });
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto w-full">
@@ -35,6 +37,15 @@ function PurchasesListComponent() {
           </Button>
         </Link>
       </div>
+
+      {isError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-700">
+          <span>Failed to load purchase records.</span>
+          <Button size="sm" variant="outline" onClick={() => refetch()} className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-100">
+            <RefreshCw className="w-3 h-3 mr-1" /> Retry
+          </Button>
+        </div>
+      )}
 
       {isLoading ? (
         <SkeletonTable rows={5} />

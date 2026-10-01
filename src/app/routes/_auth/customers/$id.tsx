@@ -1,5 +1,6 @@
 import React from 'react';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, BookOpen, Phone, Mail, MapPin, Receipt, ShieldCheck, Trash2 } from 'lucide-react';
 import { getCustomerDetailsFn, deleteCustomerFn } from '../../../../features/customers/server';
 import { getViewerFn } from '../../../../features/auth/server';
@@ -16,11 +17,24 @@ export const Route = createFileRoute('/_auth/customers/$id')({
     ]);
     return { ...details, viewer };
   },
+  errorComponent: ({ error, reset }) => (
+    <div className="p-8 text-center max-w-md mx-auto">
+      <h3 className="text-lg font-bold text-slate-900 mb-2">Customer Not Found</h3>
+      <p className="text-sm text-slate-500 mb-4">{(error as any)?.message || 'Customer details could not be loaded.'}</p>
+      <div className="flex justify-center gap-3">
+        <Button onClick={() => reset()} size="sm">Retry</Button>
+        <Link to="/customers">
+          <Button variant="outline" size="sm">Back to Customers</Button>
+        </Link>
+      </div>
+    </div>
+  ),
   component: CustomerDetailComponent,
 });
 
 function CustomerDetailComponent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const data = Route.useLoaderData();
 
   if (!data?.customer) {
@@ -44,6 +58,7 @@ function CustomerDetailComponent() {
     if (!confirm(`Are you sure you want to delete customer "${customer.name}"?`)) return;
     try {
       await deleteCustomerFn({ data: { id: customer.id } });
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
       router.navigate({ to: '/customers' });
     } catch (err: any) {
       alert(err?.message || 'Failed to delete customer');

@@ -36,6 +36,19 @@ function LoginComponent() {
     }
   }, []);
 
+  // If already authenticated, redirect to /pos
+  React.useEffect(() => {
+    let isMounted = true;
+    authClient.getSession().then((res) => {
+      if (res?.data?.user && isMounted) {
+        navigate({ to: '/pos', replace: true });
+      }
+    }).catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [navigate]);
+
   const validateForm = () => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
