@@ -121,14 +121,14 @@ function UsersSettingsComponent() {
     }
   };
 
-  const getRoleBadgeVariant = (r: string) => {
+  const getRoleBadgeVariant = (r: string): 'brand' | 'info' | 'neutral' => {
     switch (r) {
       case 'OWNER':
         return 'brand';
       case 'MANAGER':
-        return 'neutral';
+        return 'info';
       default:
-        return 'outline';
+        return 'neutral';
     }
   };
 
