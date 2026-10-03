@@ -14,10 +14,18 @@ import { EmptyState } from '../../../../components/feedback/empty-state';
 import { SkeletonTable } from '../../../../components/feedback/skeleton-table';
 
 export const Route = createFileRoute('/_auth/inventory/')({
+  loader: async () => {
+    try {
+      return await listProductsFn({ data: {} });
+    } catch {
+      return [];
+    }
+  },
   component: InventoryListComponent,
 });
 
 function InventoryListComponent() {
+  const initialProducts = Route.useLoaderData();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
@@ -30,7 +38,7 @@ function InventoryListComponent() {
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; subtitle?: string } | null>(null);
 
   const {
-    data: products = [],
+    data: products = initialProducts,
     isLoading,
     isError,
     error,
@@ -44,6 +52,7 @@ function InventoryListComponent() {
           lowStockOnly: lowStockOnly ? true : undefined,
         },
       }),
+    initialData: !search.trim() && !lowStockOnly ? initialProducts : undefined,
     staleTime: 30000,
   });
 

@@ -11,10 +11,18 @@ import { EmptyState } from '../../../../components/feedback/empty-state';
 import { SkeletonTable } from '../../../../components/feedback/skeleton-table';
 
 export const Route = createFileRoute('/_auth/customers/')({
+  loader: async () => {
+    try {
+      return await listCustomersFn({ data: {} });
+    } catch {
+      return [];
+    }
+  },
   component: CustomersListComponent,
 });
 
 function CustomersListComponent() {
+  const initialCustomers = Route.useLoaderData();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
 
@@ -28,13 +36,14 @@ function CustomersListComponent() {
   const [createError, setCreateError] = useState('');
 
   const {
-    data: customers = [],
+    data: customers = initialCustomers,
     isLoading,
     isError,
     refetch,
   } = useQuery({
     queryKey: ['customers', { search: search.trim() || undefined }],
     queryFn: () => listCustomersFn({ data: { search: search.trim() || undefined } }),
+    initialData: !search.trim() ? initialCustomers : undefined,
     staleTime: 30000,
   });
 

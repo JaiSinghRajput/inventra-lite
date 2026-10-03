@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventra-lite-v2';
+const CACHE_NAME = 'inventra-lite-v3';
 
 const STATIC_ASSETS = [
   '/',
@@ -44,12 +44,13 @@ self.addEventListener('fetch', (event) => {
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/_server') ||
     url.pathname.startsWith('/_serverFn') ||
-    url.pathname.includes('better-auth')
+    url.pathname.includes('better-auth') ||
+    request.headers.get('x-tsr-serverfn') === 'true'
   ) {
     return;
   }
 
-  // Navigation requests: Network first, fall back to cached shell
+  // Navigation requests: Network first, fall back to cached shell or offline page
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -74,20 +75,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets (CSS, JS, Fonts, Images): Cache First with background revalidation
+  // Static assets (CSS, JS, Fonts, Images): Network First with cache fallback
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      const fetchPromise = fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return networkResponse;
-        })
-        .catch(() => cachedResponse);
-
-      return cachedResponse || fetchPromise;
-    })
+    fetch(request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return networkResponse;
+      })
+      .catch(() => caches.match(request))
   );
 });

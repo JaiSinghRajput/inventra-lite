@@ -24,7 +24,7 @@ export async function resolveTenantContext(request?: Request): Promise<TenantCon
     try {
       req = getRequest();
     } catch {
-      // ignore
+      // ignore outside request scope
     }
   }
 

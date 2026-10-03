@@ -30,6 +30,13 @@ import { Badge } from '../../../components/ui/badge';
 import { Card } from '../../../components/ui/card';
 
 export const Route = createFileRoute('/_auth/pos')({
+  loader: async () => {
+    try {
+      return await getPosCatalogFn();
+    } catch {
+      return [];
+    }
+  },
   component: PosComponent,
 });
 
@@ -64,11 +71,13 @@ function generateClientUuid() {
 
 function PosComponent() {
   const queryClient = useQueryClient();
+  const initialCatalog = Route.useLoaderData();
 
   // Pre-load and cache entire active POS product catalog in client memory
-  const { data: posCatalog = [], isLoading: isCatalogLoading } = useQuery({
+  const { data: posCatalog = initialCatalog, isLoading: isCatalogLoading } = useQuery({
     queryKey: ['pos-catalog'],
     queryFn: () => getPosCatalogFn(),
+    initialData: initialCatalog,
     staleTime: 5 * 60 * 1000, // 5 min client-side cache
   });
 

@@ -10,15 +10,23 @@ import { EmptyState } from '../../../../components/feedback/empty-state';
 import { SkeletonTable } from '../../../../components/feedback/skeleton-table';
 
 export const Route = createFileRoute('/_auth/billing/')({
+  loader: async () => {
+    try {
+      return await listBillsFn({ data: {} });
+    } catch {
+      return [];
+    }
+  },
   component: BillingListComponent,
 });
 
 function BillingListComponent() {
+  const initialBills = Route.useLoaderData();
   const [statusFilter, setStatusFilter] = useState<'completed' | 'cancelled' | undefined>();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<'unpaid' | 'partial' | 'paid' | undefined>();
 
   const {
-    data: bills = [],
+    data: bills = initialBills,
     isLoading,
     isError,
     refetch,
@@ -31,6 +39,7 @@ function BillingListComponent() {
           paymentStatus: paymentStatusFilter,
         },
       }),
+    initialData: !statusFilter && !paymentStatusFilter ? initialBills : undefined,
     staleTime: 30000,
   });
 

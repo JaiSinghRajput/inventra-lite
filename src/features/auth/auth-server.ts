@@ -1,3 +1,4 @@
+import '../../server/env';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { db } from '../../server/db';
