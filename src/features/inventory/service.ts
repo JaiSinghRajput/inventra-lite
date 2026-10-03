@@ -1,4 +1,4 @@
-import { eq, and, sql, or, like, desc, isNotNull } from 'drizzle-orm';
+import { eq, and, sql, or, ilike, desc, isNotNull } from 'drizzle-orm';
 import { db } from '../../server/db';
 import { products, stockMovements, tenants, auditLogs, user } from '../../server/db/schema';
 import { generateId } from '../../server/utils/id';
@@ -242,7 +242,13 @@ export class InventoryService {
 
   static async listProducts(
     context: TenantContext,
-    params?: { search?: string; category?: string; lowStockOnly?: boolean; status?: 'active' | 'inactive' }
+    params?: {
+      search?: string;
+      category?: string;
+      lowStockOnly?: boolean;
+      stockFilter?: 'all' | 'low' | 'out' | 'in';
+      status?: 'active' | 'inactive';
+    }
   ) {
     const conditions = [eq(products.tenantId, context.tenantId)];
 
@@ -256,24 +262,23 @@ export class InventoryService {
 
     if (params?.search) {
       const q = `%${params.search.trim()}%`;
-      conditions.push(or(like(products.name, q), like(products.sku, q), like(products.barcode, q))!);
+      conditions.push(or(ilike(products.name, q), ilike(products.sku, q), ilike(products.barcode, q))!);
     }
 
-    if (params?.lowStockOnly) {
+    if (params?.stockFilter === 'out') {
+      conditions.push(sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= 0`);
+    } else if (params?.stockFilter === 'low' || params?.lowStockOnly) {
       conditions.push(
         or(
-          // Out of stock active items (stock <= 0)
-          and(
-            eq(products.status, 'active'),
-            sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= 0`
-          ),
-          // Items at or below configured low stock threshold
+          sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= 0`,
           and(
             isNotNull(products.lowStockThreshold),
             sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= CAST(${products.lowStockThreshold} AS DECIMAL(12,3))`
           )
         )!
       );
+    } else if (params?.stockFilter === 'in') {
+      conditions.push(sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) > 0`);
     }
 
     return await db

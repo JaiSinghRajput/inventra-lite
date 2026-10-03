@@ -1,4 +1,4 @@
-import { eq, and, sql, desc, or, like, inArray } from 'drizzle-orm';
+import { eq, and, sql, desc, or, ilike, inArray } from 'drizzle-orm';
 import { db } from '../../server/db';
 import {
   bills,
@@ -61,10 +61,10 @@ export class BillingService {
         and(
           eq(products.tenantId, context.tenantId),
           eq(products.status, 'active'),
-          or(like(products.name, q), like(products.sku, q), like(products.barcode, q))!
+          or(ilike(products.name, q), ilike(products.sku, q), ilike(products.barcode, q))!
         )
       )
-      .limit(20);
+      .limit(30);
   }
 
   static async checkoutBill(context: TenantContext, input: CheckoutBillInput) {

@@ -11,6 +11,7 @@ export const listProductsFn = createServerFn({ method: 'GET' })
         search: z.string().optional(),
         category: z.string().optional(),
         lowStockOnly: z.boolean().optional(),
+        stockFilter: z.enum(['all', 'low', 'out', 'in']).optional(),
         status: z.enum(['active', 'inactive']).optional(),
       })
       .optional()

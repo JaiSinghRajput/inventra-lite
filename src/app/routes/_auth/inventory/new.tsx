@@ -115,6 +115,7 @@ function NewProductComponent() {
 
       await queryClient.invalidateQueries({ queryKey: ['inventory'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
 
       navigate({ to: '/inventory' });
     } catch (err: any) {

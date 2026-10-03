@@ -124,6 +124,7 @@ function ProductDetailComponent() {
       setIsEditing(false);
       await queryClient.invalidateQueries({ queryKey: ['inventory'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
       router.invalidate();
     } catch (err: any) {
       setSaveError(err?.message || 'Failed to update product');
@@ -147,6 +148,7 @@ function ProductDetailComponent() {
       setIsAdjustModalOpen(false);
       await queryClient.invalidateQueries({ queryKey: ['inventory'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
       router.invalidate();
     } catch (err: any) {
       alert(err?.message || 'Failed to adjust stock');
@@ -167,6 +169,7 @@ function ProductDetailComponent() {
       await deleteProductFn({ data: { id: product.id } });
       await queryClient.invalidateQueries({ queryKey: ['inventory'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
       router.navigate({ to: '/inventory' });
     } catch (err: any) {
       alert(err?.message || 'Failed to delete product');

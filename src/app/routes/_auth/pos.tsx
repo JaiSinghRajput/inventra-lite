@@ -74,11 +74,11 @@ function PosComponent() {
   const initialCatalog = Route.useLoaderData();
 
   // Pre-load and cache entire active POS product catalog in client memory
-  const { data: posCatalog = initialCatalog, isLoading: isCatalogLoading } = useQuery({
+  const { data: posCatalog = [], isLoading: isCatalogLoading } = useQuery({
     queryKey: ['pos-catalog'],
     queryFn: () => getPosCatalogFn(),
-    initialData: initialCatalog,
-    staleTime: 5 * 60 * 1000, // 5 min client-side cache
+    initialData: initialCatalog && initialCatalog.length > 0 ? initialCatalog : undefined,
+    staleTime: 30000,
   });
 
   // POS State
@@ -133,29 +133,30 @@ function PosComponent() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  // Instant in-memory search across pre-loaded catalog (0ms latency, zero DB queries on keystroke)
+  // Instant in-memory search across pre-loaded catalog with safe normalization and server fallback
   const searchResults = React.useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.trim().toLowerCase().normalize('NFC');
     if (!q) return [];
 
-    if (posCatalog.length > 0) {
+    let localMatches: any[] = [];
+    if (posCatalog && posCatalog.length > 0) {
       // 1. Exact barcode match (highest priority, immediate for barcode scanners)
       const exactBarcode = posCatalog.find(
-        (p) => p.barcode && p.barcode.toLowerCase() === q
+        (p) => p.barcode && p.barcode.trim().toLowerCase() === q
       );
       if (exactBarcode) return [exactBarcode];
 
       // 2. Exact SKU match
-      const exactSku = posCatalog.find((p) => p.sku.toLowerCase() === q);
+      const exactSku = posCatalog.find((p) => p.sku && p.sku.trim().toLowerCase() === q);
       if (exactSku) return [exactSku];
 
       // 3. Multi-token match across name, SKU, and barcode
       const tokens = q.split(/\s+/).filter(Boolean);
-      return posCatalog
+      localMatches = posCatalog
         .filter((p) => {
-          const name = p.name.toLowerCase();
-          const sku = p.sku.toLowerCase();
-          const barcode = (p.barcode || '').toLowerCase();
+          const name = (p.name || '').toLowerCase().normalize('NFC');
+          const sku = (p.sku || '').toLowerCase().normalize('NFC');
+          const barcode = (p.barcode || '').toLowerCase().normalize('NFC');
           return tokens.every(
             (token) =>
               name.includes(token) || sku.includes(token) || barcode.includes(token)
@@ -164,13 +165,18 @@ function PosComponent() {
         .slice(0, 30);
     }
 
-    // Fallback to server results only if catalog is still fetching
+    if (localMatches.length > 0) {
+      return localMatches;
+    }
+
+    // Fallback to server results if no local match
     return serverResults;
   }, [searchQuery, posCatalog, serverResults]);
 
-  // Fallback server query only when catalog has not finished initial load
+  // Server query fallback for robust matching
   useEffect(() => {
-    if (!searchQuery.trim() || posCatalog.length > 0) {
+    const q = searchQuery.trim();
+    if (!q) {
       setServerResults([]);
       return;
     }
@@ -179,20 +185,20 @@ function PosComponent() {
     const timer = setTimeout(async () => {
       setIsServerSearching(true);
       try {
-        const results = await lookupPosItemsFn({ data: { query: searchQuery } });
-        if (isMounted) setServerResults(results);
+        const results = await lookupPosItemsFn({ data: { query: q } });
+        if (isMounted) setServerResults(results || []);
       } catch (err) {
-        console.error(err);
+        console.error('[LookupPosItemsError]', err);
       } finally {
         if (isMounted) setIsServerSearching(false);
       }
-    }, 150);
+    }, 200);
 
     return () => {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [searchQuery, posCatalog.length]);
+  }, [searchQuery]);
 
   // Load customers when modal opens
   useEffect(() => {
@@ -480,74 +486,147 @@ function PosComponent() {
           ) : null}
         </div>
 
-        {searchQuery.trim() && searchResults.length === 0 && (
+        {searchQuery.trim() && searchResults.length === 0 && !isServerSearching && (
           <div className="mb-4 p-4 rounded-lg border border-slate-200 bg-slate-50 text-center text-xs text-slate-500">
-            No active products found matching "{searchQuery}"
+            No active products found matching "{searchQuery}".
+            <button
+              onClick={() => setSearchQuery('')}
+              className="block mx-auto mt-2 text-brand-600 font-semibold hover:underline"
+            >
+              Clear search
+            </button>
           </div>
         )}
 
-        {/* Search Results Dropdown / Grid */}
-        {searchResults.length > 0 && (
-          <div className="mb-4 max-h-60 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white shadow-md z-20">
-            {searchResults.map((product) => (
-              <button
-                key={product.id}
-                onClick={() => addToCart(product)}
-                className="w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-brand-50 transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0 pr-3">
-                  {product.imageUrl ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPreviewImage({
-                          url: product.imageUrl,
-                          title: product.name,
-                          subtitle: `${product.sku} • Available: ${formatQuantity(product.stockQuantity)} ${product.unit}`,
-                        });
-                      }}
-                      className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100 hover:opacity-80 transition-opacity cursor-pointer"
-                      title="Click to view full photo"
-                    >
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </button>
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
-                      <Package className="w-5 h-5" />
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="font-semibold text-sm text-slate-900 truncate">{product.name}</div>
-                    <div className="text-xs text-slate-500 flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-slate-400">{product.sku}</span>
-                      {product.barcode && (
-                        <span className="flex items-center gap-0.5 text-slate-400 text-[10px]">
-                          <Barcode className="w-3 h-3" /> {product.barcode}
+        {/* Search Results Dropdown / List */}
+        {searchQuery.trim() && searchResults.length > 0 && (
+          <div className="mb-3 max-h-80 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white shadow-md z-20">
+            {searchResults.map((product) => {
+              const stock = Math.round(parseFloat(product.stockQuantity) || 0);
+              const isOut = stock <= 0;
+
+              return (
+                <button
+                  key={product.id}
+                  onClick={() => addToCart(product)}
+                  className="w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-brand-50 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-3 min-w-0 pr-3">
+                    {product.imageUrl ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewImage({
+                            url: product.imageUrl,
+                            title: product.name,
+                            subtitle: `${product.sku} • Available: ${formatQuantity(product.stockQuantity)} ${product.unit}`,
+                          });
+                        }}
+                        className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100 hover:opacity-80 transition-opacity cursor-pointer"
+                        title="Click to view full photo"
+                      >
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+                        <Package className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm text-slate-900 truncate">{product.name}</div>
+                      <div className="text-xs text-slate-500 flex items-center gap-2">
+                        <span className="font-mono text-[11px] text-slate-400">{product.sku}</span>
+                        {product.barcode && (
+                          <span className="flex items-center gap-0.5 text-slate-400 text-[10px]">
+                            <Barcode className="w-3 h-3" /> {product.barcode}
+                          </span>
+                        )}
+                        <span className={isOut ? 'text-rose-600 font-semibold' : ''}>
+                          • Stock: {formatQuantity(product.stockQuantity)} {product.unit}
                         </span>
-                      )}
-                      <span>• Stock: {formatQuantity(product.stockQuantity)} {product.unit}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="text-sm font-bold text-brand-700">
-                  {formatINR(product.sellingPrice)}
-                </div>
-              </button>
-            ))}
+                  <div className="text-sm font-bold text-brand-700 shrink-0">
+                    {formatINR(product.sellingPrice)}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {/* Instructions / Quick Hints */}
-        <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-lg text-slate-400">
-          <Barcode className="w-8 h-8 mb-2 text-slate-300" />
-          <p className="text-sm font-medium text-slate-600">Scan Barcode or Type Product Name</p>
-          <p className="text-xs text-slate-400 mt-0.5">Use barcode scanner at counter or search to add items to cart</p>
-        </div>
+        {/* Quick Product Catalog Grid (when not searching or to browse catalog) */}
+        {!searchQuery.trim() && (
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-700">
+                Quick Catalog ({posCatalog.length} active items)
+              </span>
+              <span className="text-[11px] text-slate-400">Click item to add to bill</span>
+            </div>
+
+            {isCatalogLoading && posCatalog.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center text-xs text-slate-400 py-12">
+                Loading store catalog...
+              </div>
+            ) : posCatalog.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-lg text-slate-400">
+                <Barcode className="w-8 h-8 mb-2 text-slate-300" />
+                <p className="text-sm font-medium text-slate-600">No active products</p>
+                <p className="text-xs text-slate-400 mt-0.5">Add products in Inventory to start billing</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2.5 pr-1 max-h-[calc(100vh-270px)]">
+                {posCatalog.map((product) => {
+                  const stock = Math.round(parseFloat(product.stockQuantity) || 0);
+                  const isOut = stock <= 0;
+
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => addToCart(product)}
+                      className="p-2.5 rounded-xl border border-slate-200 hover:border-brand-500 hover:shadow-xs transition-all bg-white text-left flex flex-col justify-between group cursor-pointer"
+                    >
+                      <div className="flex items-start gap-2 mb-2">
+                        {product.imageUrl ? (
+                          <div className="w-9 h-9 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          </div>
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+                            <Package className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-xs text-slate-900 truncate leading-tight group-hover:text-brand-700 transition-colors">
+                            {product.name}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">{product.sku}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-xs">
+                        <span className="font-extrabold text-slate-900 text-xs">
+                          {formatINR(product.sellingPrice)}
+                        </span>
+                        <span className={`text-[10px] font-semibold ${isOut ? 'text-rose-600' : 'text-slate-500'}`}>
+                          {isOut ? 'Out of stock' : `${formatQuantity(product.stockQuantity)} left`}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* RIGHT PANE: Cart & Checkout Summary */}
