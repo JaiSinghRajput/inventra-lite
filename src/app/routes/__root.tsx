@@ -2,6 +2,7 @@ import React from 'react';
 import { createRootRouteWithContext, Outlet, HeadContent, Scripts } from '@tanstack/react-router';
 import type { QueryClient } from '@tanstack/react-query';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'sonner';
 import { OfflineBanner } from '../../components/feedback/offline-banner';
 import appCss from '../../styles/app.css?url';
 
@@ -84,6 +85,7 @@ function RootComponent() {
               <Outlet />
             </main>
           </div>
+          <Toaster richColors position="top-right" closeButton />
         </QueryClientProvider>
         <Scripts />
       </body>

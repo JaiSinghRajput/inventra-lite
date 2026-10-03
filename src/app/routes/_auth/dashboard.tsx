@@ -57,7 +57,7 @@ function DashboardComponent() {
   });
 
   const lowStock = (lowStockRaw || []).slice(0, 5);
-  const recentBills = (billsRaw || []).slice(0, 5);
+  const recentBills = (billsRaw || []).filter((b) => b.status === 'completed').slice(0, 5);
 
   const handleRetryAll = () => {
     refetchSummary();

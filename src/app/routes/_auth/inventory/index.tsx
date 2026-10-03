@@ -15,6 +15,7 @@ import {
   XCircle,
   ExternalLink,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { listProductsFn, adjustStockFn } from '../../../../features/inventory/server';
 import { formatINR } from '../../../../lib/currency';
 import { formatQuantity } from '../../../../lib/quantity';
@@ -43,7 +44,9 @@ function InventoryListComponent() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [stockFilter, setStockFilter] = useState<StockFilterType>('all');
-  const [viewMode, setViewMode] = useState<'auto' | 'cards' | 'table'>('auto');
+  const [viewMode, setViewMode] = useState<'card' | 'list'>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'card' : 'list'
+  );
 
   // Stock Adjustment Modal
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
@@ -136,9 +139,10 @@ function InventoryListComponent() {
       await queryClient.invalidateQueries({ queryKey: ['inventory'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
       await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
+      toast.success('Stock adjusted successfully');
     } catch (err: any) {
       console.error('[AdjustStockError]', err);
-      alert(err?.message || 'Failed to adjust stock. Please try again.');
+      toast.error(err?.message || 'Failed to adjust stock. Please try again.');
     } finally {
       setIsAdjusting(false);
     }
@@ -154,30 +158,32 @@ function InventoryListComponent() {
         </div>
         <div className="flex items-center gap-2">
           {/* View Mode Toggle */}
-          <div className="hidden sm:flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
             <button
               type="button"
-              onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                viewMode === 'table' || viewMode === 'auto'
-                  ? 'bg-white text-slate-800 shadow-2xs font-semibold'
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
-              title="Table view"
+              title="List view"
             >
               <List className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">List</span>
             </button>
             <button
               type="button"
-              onClick={() => setViewMode('cards')}
-              className={`p-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                viewMode === 'cards'
-                  ? 'bg-white text-slate-800 shadow-2xs font-semibold'
+              onClick={() => setViewMode('card')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                viewMode === 'card'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
               title="Card view"
             >
               <LayoutGrid className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Cards</span>
             </button>
           </div>
 
@@ -321,8 +327,8 @@ function InventoryListComponent() {
         />
       ) : (
         <>
-          {/* MOBILE MINIMAL CARD-LIKE VIEW (Default on small screens, or when viewMode === 'cards') */}
-          <div className={`${viewMode === 'table' ? 'hidden' : viewMode === 'cards' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3' : 'block sm:hidden space-y-3'}`}>
+          {/* CARD VIEW */}
+          <div className={`${viewMode === 'list' ? 'hidden' : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'}`}>
             {filteredProducts.map((p) => {
               const stock = Math.round(parseFloat(p.stockQuantity) || 0);
               const threshold = p.lowStockThreshold ? Math.round(parseFloat(p.lowStockThreshold)) : null;
@@ -451,8 +457,8 @@ function InventoryListComponent() {
             })}
           </div>
 
-          {/* DESKTOP TABLE VIEW (Default on sm+ screens when viewMode !== 'cards') */}
-          <div className={`${viewMode === 'cards' ? 'hidden' : viewMode === 'table' ? 'block' : 'hidden sm:block'} bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs`}>
+          {/* DESKTOP / LIST VIEW */}
+          <div className={`${viewMode === 'card' ? 'hidden' : 'block'} bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs`}>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold text-[11px] uppercase tracking-wider">

@@ -13,7 +13,7 @@ import {
   auditLogs,
 } from '../../server/db/schema';
 import { generateId } from '../../server/utils/id';
-import { enforceOwner, type TenantContext } from '../auth/middleware';
+import { type TenantContext } from '../auth/middleware';
 import type { CheckoutBillInput, CancelBillInput } from './schemas';
 
 export class BillingService {
@@ -34,7 +34,8 @@ export class BillingService {
       .where(
         and(
           eq(products.tenantId, context.tenantId),
-          eq(products.status, 'active')
+          eq(products.status, 'active'),
+          sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) > 0`
         )
       )
       .orderBy(products.name);
@@ -61,6 +62,7 @@ export class BillingService {
         and(
           eq(products.tenantId, context.tenantId),
           eq(products.status, 'active'),
+          sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) > 0`,
           or(ilike(products.name, q), ilike(products.sku, q), ilike(products.barcode, q))!
         )
       )
@@ -345,7 +347,9 @@ export class BillingService {
   }
 
   static async cancelBill(context: TenantContext, input: CancelBillInput) {
-    enforceOwner(context);
+    if (!context.tenantId || !context.userId) {
+      throw new Response('Unauthorized', { status: 401 });
+    }
 
     return await db.transaction(async (tx) => {
       // 1. Lock bill row

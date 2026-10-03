@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LogOut, Wifi, WifiOff, ChevronDown, Check, Plus, Store, Shield } from 'lucide-react';
+import { toast } from 'sonner';
 import { authClient } from '../../features/auth/auth-client';
 import { listUserStoresFn, createNewStoreFn } from '../../features/settings/server';
 import { Modal } from '../ui/modal';
@@ -75,7 +76,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       document.cookie = `inventra_active_tenant=${encodeURIComponent(res.tenantId)}; path=/; max-age=31536000; SameSite=Lax`;
       window.location.reload();
     } catch (err: any) {
-      alert(err?.message || 'Failed to create store');
+      toast.error(err?.message || 'Failed to create store');
       setIsCreating(false);
     }
   };

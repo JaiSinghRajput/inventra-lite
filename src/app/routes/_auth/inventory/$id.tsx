@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Clock, History, Edit2, SlidersHorizontal, Trash2, Eye } from 'lucide-react';
+import { toast } from 'sonner';
 import { getProductDetailsFn, updateProductFn, adjustStockFn, deleteProductFn } from '../../../../features/inventory/server';
 import { getViewerFn } from '../../../../features/auth/server';
 import { formatINR, inrToPaise, paiseToINR } from '../../../../lib/currency';
@@ -149,9 +150,10 @@ function ProductDetailComponent() {
       await queryClient.invalidateQueries({ queryKey: ['inventory'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
       await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
+      toast.success('Stock adjusted successfully');
       router.invalidate();
     } catch (err: any) {
-      alert(err?.message || 'Failed to adjust stock');
+      toast.error(err?.message || 'Failed to adjust stock');
     } finally {
       setIsAdjusting(false);
     }
@@ -170,9 +172,10 @@ function ProductDetailComponent() {
       await queryClient.invalidateQueries({ queryKey: ['inventory'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
       await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
+      toast.success('Product deleted successfully');
       router.navigate({ to: '/inventory' });
     } catch (err: any) {
-      alert(err?.message || 'Failed to delete product');
+      toast.error(err?.message || 'Failed to delete product');
     }
   };
 

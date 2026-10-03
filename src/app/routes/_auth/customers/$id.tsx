@@ -2,6 +2,7 @@ import React from 'react';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, BookOpen, Phone, Mail, MapPin, Receipt, ShieldCheck, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { getCustomerDetailsFn, deleteCustomerFn } from '../../../../features/customers/server';
 import { getViewerFn } from '../../../../features/auth/server';
 import { formatINR } from '../../../../lib/currency';
@@ -59,9 +60,10 @@ function CustomerDetailComponent() {
     try {
       await deleteCustomerFn({ data: { id: customer.id } });
       await queryClient.invalidateQueries({ queryKey: ['customers'] });
+      toast.success('Customer deleted successfully');
       router.navigate({ to: '/customers' });
     } catch (err: any) {
-      alert(err?.message || 'Failed to delete customer');
+      toast.error(err?.message || 'Failed to delete customer');
     }
   };
 

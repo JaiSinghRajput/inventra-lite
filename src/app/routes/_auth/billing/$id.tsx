@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Printer, Ban, CreditCard, RotateCcw, AlertCircle, CheckCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { getBillDetailsFn, cancelBillFn } from '../../../../features/billing/server';
 import { recordSubsequentPaymentFn, reversePaymentFn } from '../../../../features/payments/server';
 import { formatINR, inrToPaise, paiseToINR } from '../../../../lib/currency';
@@ -91,9 +92,11 @@ function BillDetailComponent() {
       await queryClient.invalidateQueries({ queryKey: ['billing'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
       await queryClient.invalidateQueries({ queryKey: ['customers'] });
+      toast.success('Payment recorded successfully');
       router.invalidate();
     } catch (err: any) {
       setPayError(err?.message || 'Payment recording failed');
+      toast.error(err?.message || 'Payment recording failed');
     } finally {
       setIsPaying(false);
     }
@@ -123,9 +126,13 @@ function BillDetailComponent() {
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
       await queryClient.invalidateQueries({ queryKey: ['inventory'] });
       await queryClient.invalidateQueries({ queryKey: ['customers'] });
+      await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
+      toast.success('Bill cancelled successfully. Inventory restored & balances cleared.');
       router.invalidate();
     } catch (err: any) {
-      setCancelError(err?.message || 'Failed to cancel bill');
+      const msg = err?.message || 'Failed to cancel bill';
+      setCancelError(msg);
+      toast.error(msg);
     } finally {
       setIsCancelling(false);
     }
@@ -156,9 +163,13 @@ function BillDetailComponent() {
       await queryClient.invalidateQueries({ queryKey: ['billing'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
       await queryClient.invalidateQueries({ queryKey: ['customers'] });
+      await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
+      toast.success('Payment reversed successfully');
       router.invalidate();
     } catch (err: any) {
-      setReverseError(err?.message || 'Payment reversal failed');
+      const msg = err?.message || 'Payment reversal failed';
+      setReverseError(msg);
+      toast.error(msg);
     } finally {
       setIsReversing(false);
     }

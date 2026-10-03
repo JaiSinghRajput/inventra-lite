@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createFileRoute, getRouteApi } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Users, UserPlus, Shield, UserCheck, UserX, Trash2, Mail, Clock, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   listStaffFn,
   addStaffFn,
@@ -95,8 +96,9 @@ function UsersSettingsComponent() {
     try {
       await toggleStaffStatusFn({ data: { membershipId, isActive: !currentStatus } });
       await queryClient.invalidateQueries({ queryKey: ['settings', 'staff'] });
+      toast.success('Staff status updated successfully');
     } catch (err: any) {
-      alert(err?.message || 'Failed to toggle status');
+      toast.error(err?.message || 'Failed to toggle status');
     }
   };
 
@@ -105,8 +107,9 @@ function UsersSettingsComponent() {
     try {
       await updateStaffRoleFn({ data: { membershipId, role: newRole } });
       await queryClient.invalidateQueries({ queryKey: ['settings', 'staff'] });
+      toast.success('Staff role updated successfully');
     } catch (err: any) {
-      alert(err?.message || 'Failed to update role');
+      toast.error(err?.message || 'Failed to update role');
     }
   };
 
@@ -116,8 +119,9 @@ function UsersSettingsComponent() {
     try {
       await removeStaffFn({ data: { membershipId } });
       await queryClient.invalidateQueries({ queryKey: ['settings', 'staff'] });
+      toast.success('Staff member removed successfully');
     } catch (err: any) {
-      alert(err?.message || 'Failed to remove staff member');
+      toast.error(err?.message || 'Failed to remove staff member');
     }
   };
 
