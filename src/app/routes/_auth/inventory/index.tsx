@@ -106,7 +106,7 @@ function InventoryListComponent() {
           }`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
-          Low Stock Alerts
+          Low / Out of Stock
         </button>
       </div>
 
@@ -144,9 +144,10 @@ function InventoryListComponent() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {products.map((p) => {
-                  const stock = parseFloat(p.stockQuantity);
-                  const threshold = p.lowStockThreshold ? parseFloat(p.lowStockThreshold) : null;
-                  const isLow = threshold !== null && stock <= threshold;
+                  const stock = Math.round(parseFloat(p.stockQuantity) || 0);
+                  const threshold = p.lowStockThreshold ? Math.round(parseFloat(p.lowStockThreshold)) : null;
+                  const isOutOfStock = p.status === 'active' && stock <= 0;
+                  const isLow = (threshold !== null && stock <= threshold) || isOutOfStock;
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
@@ -191,14 +192,18 @@ function InventoryListComponent() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1.5">
-                          <span className={`font-extrabold ${isLow ? 'text-amber-600' : 'text-slate-800'}`}>
+                          <span className={`font-extrabold ${stock <= 0 ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-slate-800'}`}>
                             {formatQuantity(p.stockQuantity)} {p.unit}
                           </span>
-                          {isLow && (
+                          {stock <= 0 ? (
+                            <Badge variant="danger" className="text-[10px]">
+                              Out of Stock
+                            </Badge>
+                          ) : isLow ? (
                             <Badge variant="warning" className="text-[10px]">
                               Low (≤{formatQuantity(threshold)})
                             </Badge>
-                          )}
+                          ) : null}
                         </div>
                       </td>
                       <td className="py-3 px-4">

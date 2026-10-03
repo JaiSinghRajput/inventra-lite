@@ -243,7 +243,9 @@ function DashboardComponent() {
                   </div>
                   <div className="text-right">
                     <span className="font-extrabold text-rose-600">{formatQuantity(item.stockQuantity)} {item.unit}</span>
-                    <div className="text-[10px] text-slate-400">Threshold: {formatQuantity(item.lowStockThreshold)}</div>
+                    <div className="text-[10px] text-slate-400">
+                      {item.lowStockThreshold ? `Threshold: ${formatQuantity(item.lowStockThreshold)}` : 'Out of stock'}
+                    </div>
                   </div>
                 </div>
               ))}

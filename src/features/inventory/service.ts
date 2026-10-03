@@ -22,7 +22,7 @@ export class InventoryService {
       const sku = `${tenant.skuPrefix}-${String(seq).padStart(6, '0')}`;
 
       const productId = generateId('prd');
-      const initialStock = input.initialStock || 0;
+      const initialStock = Math.round(input.initialStock || 0);
 
       // 2. Insert product record
       await tx.insert(products).values({
@@ -35,7 +35,7 @@ export class InventoryService {
         unit: input.unit || 'unit',
         stockQuantity: initialStock.toFixed(3),
         lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== null
-          ? input.lowStockThreshold.toFixed(3)
+          ? Math.round(input.lowStockThreshold).toFixed(3)
           : null,
         features: input.features || null,
         category: input.category?.trim() || null,
@@ -98,7 +98,7 @@ export class InventoryService {
           purchasePrice: input.purchasePrice,
           unit: input.unit,
           lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== null
-            ? input.lowStockThreshold.toFixed(3)
+            ? Math.round(input.lowStockThreshold).toFixed(3)
             : null,
           features: input.features || null,
           category: input.category?.trim() || null,
@@ -194,10 +194,11 @@ export class InventoryService {
 
       if (!product) throw new Error('Product not found');
 
-      const currentStock = parseFloat(product.stockQuantity);
-      const newBalance = currentStock + input.delta;
+      const currentStock = Math.round(parseFloat(product.stockQuantity) || 0);
+      const delta = Math.round(input.delta);
+      const newBalance = currentStock + delta;
       if (newBalance < 0) {
-        throw new Error(`Insufficient stock. Current stock is ${currentStock} ${product.unit}, adjustment of ${input.delta} would result in negative stock.`);
+        throw new Error(`Insufficient stock. Current stock is ${currentStock} ${product.unit}, adjustment of ${delta} would result in negative stock.`);
       }
 
       // 2. Update stock quantity
@@ -212,7 +213,7 @@ export class InventoryService {
         id: movementId,
         tenantId: context.tenantId,
         productId: input.productId,
-        quantityDelta: input.delta.toFixed(3),
+        quantityDelta: delta.toFixed(3),
         balanceAfter: newBalance.toFixed(3),
         movementType: 'adjustment',
         reason: input.reason.trim(),
@@ -260,9 +261,17 @@ export class InventoryService {
 
     if (params?.lowStockOnly) {
       conditions.push(
-        and(
-          isNotNull(products.lowStockThreshold),
-          sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= CAST(${products.lowStockThreshold} AS DECIMAL(12,3))`
+        or(
+          // Out of stock active items (stock <= 0)
+          and(
+            eq(products.status, 'active'),
+            sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= 0`
+          ),
+          // Items at or below configured low stock threshold
+          and(
+            isNotNull(products.lowStockThreshold),
+            sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= CAST(${products.lowStockThreshold} AS DECIMAL(12,3))`
+          )
         )!
       );
     }

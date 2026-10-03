@@ -10,18 +10,19 @@ describe('Quantity formatting and parsing', () => {
     expect(formatQuantity('15.000')).toBe('15');
   });
 
-  it('formats decimals up to 3 decimal places without redundant trailing zeroes', () => {
-    expect(formatQuantity('8.500')).toBe('8.5');
-    expect(formatQuantity(8.25)).toBe('8.25');
-    expect(formatQuantity('1.125')).toBe('1.125');
-    expect(formatQuantity('12.300')).toBe('12.3');
+  it('formats stock quantities strictly as whole integers and not floats', () => {
+    expect(formatQuantity('8.500')).toBe('9');
+    expect(formatQuantity(8.25)).toBe('8');
+    expect(formatQuantity('1.125')).toBe('1');
+    expect(formatQuantity('12.300')).toBe('12');
+    expect(formatQuantity('0.000')).toBe('0');
   });
 
-  it('safely parses user string input with commas and spaces', () => {
+  it('safely parses user string input with commas and spaces into whole integers', () => {
     expect(parseCleanQuantity('8')).toBe(8);
     expect(parseCleanQuantity('8.000')).toBe(8);
     expect(parseCleanQuantity('1,000')).toBe(1000);
-    expect(parseCleanQuantity(' 25.5 ')).toBe(25.5);
+    expect(parseCleanQuantity(' 25.5 ')).toBe(26);
     expect(parseCleanQuantity('')).toBe(0);
     expect(parseCleanQuantity(null)).toBe(0);
   });

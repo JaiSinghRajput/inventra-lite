@@ -89,9 +89,16 @@ function ProductDetailComponent() {
       return;
     }
 
-    if (lowStockThreshold.trim() && parseCleanQuantity(lowStockThreshold, true) < 0) {
-      setSaveError('Low stock threshold cannot be negative');
-      return;
+    if (lowStockThreshold.trim()) {
+      const parsedThreshold = parseCleanQuantity(lowStockThreshold, true);
+      if (parsedThreshold < 0) {
+        setSaveError('Low stock threshold cannot be negative');
+        return;
+      }
+      if (lowStockThreshold.includes('.') || !Number.isInteger(parsedThreshold)) {
+        setSaveError('Low stock threshold must be a whole integer');
+        return;
+      }
     }
 
     setSaveError('');
@@ -150,7 +157,8 @@ function ProductDetailComponent() {
 
   const stock = parseCleanQuantity(product.stockQuantity);
   const threshold = product.lowStockThreshold ? parseCleanQuantity(product.lowStockThreshold) : null;
-  const isLow = threshold !== null && stock <= threshold;
+  const isOutOfStock = product.status === 'active' && stock <= 0;
+  const isLow = (threshold !== null && stock <= threshold) || isOutOfStock;
   const isOwner = data?.viewer?.user?.role === 'OWNER';
 
   const handleDelete = async () => {
@@ -227,10 +235,14 @@ function ProductDetailComponent() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="text-center p-3 sm:p-4">
           <span className="text-[11px] text-slate-500 font-semibold uppercase">Physical Stock</span>
-          <p className={`text-xl font-extrabold mt-1 ${isLow ? 'text-amber-600' : 'text-slate-900'}`}>
+          <p className={`text-xl font-extrabold mt-1 ${stock <= 0 ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-slate-900'}`}>
             {formatQuantity(product.stockQuantity)} <span className="text-xs font-normal text-slate-500">{product.unit}</span>
           </p>
-          {isLow && <span className="text-[10px] text-amber-600 font-bold">Low Stock Warning</span>}
+          {stock <= 0 ? (
+            <span className="text-[10px] text-rose-600 font-bold">Out of Stock Warning</span>
+          ) : isLow ? (
+            <span className="text-[10px] text-amber-600 font-bold">Low Stock Warning</span>
+          ) : null}
         </Card>
 
         <Card className="text-center p-3 sm:p-4">
@@ -287,10 +299,15 @@ function ProductDetailComponent() {
               <Input label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} required />
               <Input
                 label="Low Stock Threshold"
-                type="number"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 placeholder="None"
                 value={lowStockThreshold}
-                onChange={(e) => setLowStockThreshold(e.target.value)}
+                onChange={(e) => {
+                  const clean = e.target.value.replace(/[^0-9]/g, '');
+                  setLowStockThreshold(clean);
+                }}
               />
               <div>
                 <label className="text-xs font-semibold text-slate-700 mb-1 block">Status</label>

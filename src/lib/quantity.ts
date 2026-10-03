@@ -13,17 +13,12 @@ export function formatQuantity(qty: number | string | bigint | null | undefined)
   const num = typeof qty === 'number' ? qty : parseFloat(String(qty).replace(/,/g, ''));
   if (isNaN(num)) return '0';
 
-  // If it's a whole number, format without decimal places (e.g. 8 instead of 8.000)
-  if (Number.isInteger(num)) {
-    return num.toString();
-  }
-
-  // Otherwise, display up to 3 decimal places without trailing zeroes (e.g. 8.5 instead of 8.500)
-  return parseFloat(num.toFixed(3)).toString();
+  // Stock quantities must always be whole integers
+  return Math.round(num).toString();
 }
 
 /**
- * Safely parses user quantity input into a clean number.
+ * Safely parses user quantity input into a clean whole integer number.
  * Strips out thousands commas (e.g. "8,000" -> 8000, or "8" -> 8)
  * and guards against NaN or negative numbers if required.
  */
@@ -31,7 +26,8 @@ export function parseCleanQuantity(val: string | number | null | undefined, allo
   if (val === null || val === undefined || val === '') return 0;
   if (typeof val === 'number') {
     if (isNaN(val)) return 0;
-    return allowNegative ? val : Math.max(0, val);
+    const rounded = Math.round(val);
+    return allowNegative ? rounded : Math.max(0, rounded);
   }
 
   // Remove commas, whitespace
@@ -39,5 +35,6 @@ export function parseCleanQuantity(val: string | number | null | undefined, allo
   const parsed = parseFloat(sanitized);
   if (isNaN(parsed)) return 0;
 
-  return allowNegative ? parsed : Math.max(0, parsed);
+  const rounded = Math.round(parsed);
+  return allowNegative ? rounded : Math.max(0, rounded);
 }

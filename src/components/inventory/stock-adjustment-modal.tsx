@@ -83,15 +83,14 @@ export function StockAdjustmentModal({
 
   // Keypad button press handler
   const handleKeypadPress = (key: string) => {
+    if (key === '.') return; // Whole numbers only, no decimal point
     if (mode === 'direct') {
       if (key === 'BACKSPACE') {
         setDirectCount((prev) => (prev.length > 1 ? prev.slice(0, -1) : ''));
       } else if (key === 'CLEAR') {
         setDirectCount('');
-      } else if (key === '.') {
-        if (!directCount.includes('.')) {
-          setDirectCount((prev) => (prev === '' ? '0.' : prev + '.'));
-        }
+      } else if (key === '00') {
+        setDirectCount((prev) => (prev === '' || prev === '0' ? '0' : prev + '00'));
       } else {
         setDirectCount((prev) => (prev === '0' ? key : prev + key));
       }
@@ -100,27 +99,21 @@ export function StockAdjustmentModal({
         setDeltaAmount((prev) => (prev.length > 1 ? prev.slice(0, -1) : ''));
       } else if (key === 'CLEAR') {
         setDeltaAmount('');
-      } else if (key === '.') {
-        if (!deltaAmount.includes('.')) {
-          setDeltaAmount((prev) => (prev === '' ? '0.' : prev + '.'));
-        }
+      } else if (key === '00') {
+        setDeltaAmount((prev) => (prev === '' || prev === '0' ? '0' : prev + '00'));
       } else {
         setDeltaAmount((prev) => (prev === '0' ? key : prev + key));
       }
     }
   };
 
-  // Direct count input handler (sanitizes non-numeric chars)
+  // Direct count input handler (sanitizes to integer digits only)
   const handleDirectChange = (val: string) => {
-    let clean = val.replace(/[^0-9.]/g, '');
-    const parts = clean.split('.');
-    if (parts.length > 2) {
-      clean = `${parts[0]}.${parts.slice(1).join('')}`;
-    }
+    const clean = val.replace(/[^0-9]/g, '');
     setDirectCount(clean);
   };
 
-  // Delta amount input handler (auto-detects +/- signs if typed on keyboard)
+  // Delta amount input handler (auto-detects +/- signs if typed on keyboard, integer digits only)
   const handleDeltaChange = (val: string) => {
     let text = val;
     if (text.includes('-')) {
@@ -130,11 +123,7 @@ export function StockAdjustmentModal({
       setDeltaSign('+');
       text = text.replace(/\+/g, '');
     }
-    let clean = text.replace(/[^0-9.]/g, '');
-    const parts = clean.split('.');
-    if (parts.length > 2) {
-      clean = `${parts[0]}.${parts.slice(1).join('')}`;
-    }
+    const clean = text.replace(/[^0-9]/g, '');
     setDeltaAmount(clean);
   };
 
@@ -181,12 +170,15 @@ export function StockAdjustmentModal({
     e.preventDefault();
     setError('');
 
-    if (computedNewBalance < 0) {
-      setError(`Cannot reduce stock below 0. Resulting balance would be ${computedNewBalance} ${unit}.`);
+    const roundedNewBalance = Math.round(computedNewBalance);
+    const roundedDelta = Math.round(computedDelta);
+
+    if (roundedNewBalance < 0) {
+      setError(`Cannot reduce stock below 0. Resulting balance would be ${roundedNewBalance} ${unit}.`);
       return;
     }
 
-    if (Math.abs(computedDelta) < 0.0001) {
+    if (roundedDelta === 0) {
       setError('Stock quantity has not changed. Please specify a new quantity or delta.');
       return;
     }
@@ -198,7 +190,7 @@ export function StockAdjustmentModal({
     }
 
     try {
-      await onConfirm(product.id, computedDelta, finalReason);
+      await onConfirm(product.id, roundedDelta, finalReason);
       onClose();
     } catch (err: any) {
       setError(err?.message || 'Failed to adjust stock');
@@ -335,7 +327,7 @@ export function StockAdjustmentModal({
             {keyboardMode === 'onscreen' && (
               <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-2xs">
                 <div className="grid grid-cols-3 gap-1.5">
-                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0'].map((digit) => (
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'].map((digit) => (
                     <button
                       key={digit}
                       type="button"
@@ -524,7 +516,7 @@ export function StockAdjustmentModal({
             {keyboardMode === 'onscreen' && (
               <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-2xs">
                 <div className="grid grid-cols-3 gap-1.5">
-                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0'].map((digit) => (
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'].map((digit) => (
                     <button
                       key={digit}
                       type="button"

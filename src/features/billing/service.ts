@@ -17,6 +17,29 @@ import { enforceOwner, type TenantContext } from '../auth/middleware';
 import type { CheckoutBillInput, CancelBillInput } from './schemas';
 
 export class BillingService {
+  static async getPosCatalog(context: TenantContext) {
+    return await db
+      .select({
+        id: products.id,
+        name: products.name,
+        sku: products.sku,
+        barcode: products.barcode,
+        unit: products.unit,
+        sellingPrice: products.sellingPrice,
+        purchasePrice: products.purchasePrice,
+        stockQuantity: products.stockQuantity,
+        imageUrl: products.imageUrl,
+      })
+      .from(products)
+      .where(
+        and(
+          eq(products.tenantId, context.tenantId),
+          eq(products.status, 'active')
+        )
+      )
+      .orderBy(products.name);
+  }
+
   static async lookupPosItems(context: TenantContext, query: string) {
     if (!query || query.trim().length === 0) return [];
     const q = `%${query.trim()}%`;

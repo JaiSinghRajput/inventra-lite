@@ -141,7 +141,7 @@ function ReportsComponent() {
                       {formatQuantity(p.stockQuantity)} {p.unit}
                     </td>
                     <td className="py-2.5 px-4 text-slate-500 font-mono">
-                      {formatQuantity(p.lowStockThreshold)} {p.unit}
+                      {p.lowStockThreshold ? `${formatQuantity(p.lowStockThreshold)} ${p.unit}` : 'Out of stock'}
                     </td>
                     <td className="py-2.5 px-4 text-right">
                       <Link to="/purchases/new">

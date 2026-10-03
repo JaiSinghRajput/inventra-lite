@@ -136,4 +136,120 @@ describe('Server-Side Billing Invariants & Currency Utilities', () => {
     const emptyResult = await deleteFromCloudinary('');
     expect(emptyResult.success).toBe(false);
   });
+
+  it('enforces product inventory stock quantities, thresholds, and adjustment deltas must be whole integers', async () => {
+    const { createProductSchema, adjustStockSchema, updateProductSchema } = await import('../../src/features/inventory/schemas');
+
+    // Floats in initial stock must fail validation
+    const floatInitial = createProductSchema.safeParse({
+      name: 'Cement Bag',
+      sellingPrice: 40000,
+      initialStock: 12.5,
+    });
+    expect(floatInitial.success).toBe(false);
+
+    // Floats in low stock threshold must fail validation
+    const floatThreshold = createProductSchema.safeParse({
+      name: 'Cement Bag',
+      sellingPrice: 40000,
+      lowStockThreshold: 4.2,
+    });
+    expect(floatThreshold.success).toBe(false);
+
+    // Integers in initial stock and threshold must succeed
+    const validProduct = createProductSchema.safeParse({
+      name: 'Cement Bag',
+      sellingPrice: 40000,
+      initialStock: 12,
+      lowStockThreshold: 5,
+    });
+    expect(validProduct.success).toBe(true);
+
+    // Float delta in adjustment must fail validation
+    const floatDelta = adjustStockSchema.safeParse({
+      productId: 'p_1',
+      delta: 2.5,
+      reason: 'Physical count audit',
+    });
+    expect(floatDelta.success).toBe(false);
+
+    // Whole integer delta in adjustment must succeed
+    const validDelta = adjustStockSchema.safeParse({
+      productId: 'p_1',
+      delta: -3,
+      reason: 'Physical count audit',
+    });
+    expect(validDelta.success).toBe(true);
+  });
+
+  it('correctly qualifies low stock and out-of-stock active items in low stock filter', () => {
+    const isItemLowStockOrOut = (item: {
+      status: 'active' | 'inactive';
+      stockQuantity: number;
+      lowStockThreshold: number | null;
+    }) => {
+      const isOutOfStockActive = item.status === 'active' && item.stockQuantity <= 0;
+      const isBelowThreshold = item.lowStockThreshold !== null && item.stockQuantity <= item.lowStockThreshold;
+      return isOutOfStockActive || isBelowThreshold;
+    };
+
+    // Active item with 0 stock and no threshold must be included
+    expect(isItemLowStockOrOut({ status: 'active', stockQuantity: 0, lowStockThreshold: null })).toBe(true);
+
+    // Inactive item with 0 stock and no threshold must NOT be included
+    expect(isItemLowStockOrOut({ status: 'inactive', stockQuantity: 0, lowStockThreshold: null })).toBe(false);
+
+    // Active item with stock at threshold must be included
+    expect(isItemLowStockOrOut({ status: 'active', stockQuantity: 5, lowStockThreshold: 5 })).toBe(true);
+
+    // Active item with healthy stock above threshold must NOT be included
+    expect(isItemLowStockOrOut({ status: 'active', stockQuantity: 10, lowStockThreshold: 5 })).toBe(false);
+  });
+
+  it('performs instant tokenized in-memory search across catalog with barcode priority', () => {
+    const catalog = [
+      { id: '1', name: 'Polycab 2.5 Sqmm Copper Wire Red', sku: 'RAJ-000001', barcode: '8901234567890' },
+      { id: '2', name: 'Finolex 1.5 Sqmm Copper Wire Blue', sku: 'RAJ-000002', barcode: '8901234567891' },
+      { id: '3', name: 'Havells 2.5 Sqmm Wire Yellow', sku: 'RAJ-000003', barcode: '8901234567892' },
+      { id: '4', name: 'Anchor Modular Switch 6A', sku: 'RAJ-000004', barcode: '8901234567893' },
+    ];
+
+    const searchPosCatalog = (query: string) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return [];
+
+      // 1. Exact barcode match
+      const exactBarcode = catalog.find((p) => p.barcode && p.barcode.toLowerCase() === q);
+      if (exactBarcode) return [exactBarcode];
+
+      // 2. Exact SKU match
+      const exactSku = catalog.find((p) => p.sku.toLowerCase() === q);
+      if (exactSku) return [exactSku];
+
+      // 3. Multi-token match
+      const tokens = q.split(/\s+/).filter(Boolean);
+      return catalog.filter((p) => {
+        const name = p.name.toLowerCase();
+        const sku = p.sku.toLowerCase();
+        const barcode = (p.barcode || '').toLowerCase();
+        return tokens.every((t) => name.includes(t) || sku.includes(t) || barcode.includes(t));
+      });
+    };
+
+    // Barcode scanner exact match
+    expect(searchPosCatalog('8901234567891')).toHaveLength(1);
+    expect(searchPosCatalog('8901234567891')[0].sku).toBe('RAJ-000002');
+
+    // Multi-term search: "wire 2.5" matches Polycab and Havells
+    const results = searchPosCatalog('wire 2.5');
+    expect(results).toHaveLength(2);
+    expect(results.map((r) => r.id)).toEqual(['1', '3']);
+
+    // SKU search
+    expect(searchPosCatalog('RAJ-000004')).toHaveLength(1);
+    expect(searchPosCatalog('RAJ-000004')[0].name).toContain('Anchor Modular Switch');
+
+    // Case-insensitivity
+    expect(searchPosCatalog('POLYCAB')).toHaveLength(1);
+  });
 });

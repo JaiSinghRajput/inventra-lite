@@ -1,4 +1,4 @@
-import { eq, and, sql, gte, lte, isNotNull, desc } from 'drizzle-orm';
+import { eq, and, or, sql, gte, lte, isNotNull, desc, asc } from 'drizzle-orm';
 import { db } from '../../server/db';
 import { bills, products } from '../../server/db/schema';
 import type { TenantContext } from '../auth/middleware';
@@ -47,10 +47,17 @@ export class ReportsService {
         and(
           eq(products.tenantId, context.tenantId),
           eq(products.status, 'active'),
-          isNotNull(products.lowStockThreshold),
-          sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= CAST(${products.lowStockThreshold} AS DECIMAL(12,3))`
+          or(
+            // Out of stock active items (qty 0 or negative)
+            sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= 0`,
+            // Items at or below configured low stock threshold
+            and(
+              isNotNull(products.lowStockThreshold),
+              sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) <= CAST(${products.lowStockThreshold} AS DECIMAL(12,3))`
+            )
+          )
         )
       )
-      .orderBy(desc(products.stockQuantity));
+      .orderBy(sql`CAST(${products.stockQuantity} AS DECIMAL(12,3)) ASC`);
   }
 }

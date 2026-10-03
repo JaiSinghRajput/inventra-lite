@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
   Plus,
@@ -15,8 +15,9 @@ import {
   AlertCircle,
   Barcode,
   Package,
+  Zap,
 } from 'lucide-react';
-import { lookupPosItemsFn, checkoutBillFn } from '../../../features/billing/server';
+import { lookupPosItemsFn, getPosCatalogFn, checkoutBillFn } from '../../../features/billing/server';
 import { listCustomersFn } from '../../../features/customers/server';
 import { formatINR, inrToPaise, paiseToINR } from '../../../lib/currency';
 import { formatQuantity, parseCleanQuantity } from '../../../lib/quantity';
@@ -63,10 +64,18 @@ function generateClientUuid() {
 
 function PosComponent() {
   const queryClient = useQueryClient();
+
+  // Pre-load and cache entire active POS product catalog in client memory
+  const { data: posCatalog = [], isLoading: isCatalogLoading } = useQuery({
+    queryKey: ['pos-catalog'],
+    queryFn: () => getPosCatalogFn(),
+    staleTime: 5 * 60 * 1000, // 5 min client-side cache
+  });
+
   // POS State
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [serverResults, setServerResults] = useState<any[]>([]);
+  const [isServerSearching, setIsServerSearching] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [charges, setCharges] = useState<CartCharge[]>([]);
   const [billDiscountINR, setBillDiscountINR] = useState<string>('0');
@@ -102,27 +111,79 @@ function PosComponent() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Search Debounce
+  // Global F2 keyboard shortcut to jump to search bar
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  // Instant in-memory search across pre-loaded catalog (0ms latency, zero DB queries on keystroke)
+  const searchResults = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+
+    if (posCatalog.length > 0) {
+      // 1. Exact barcode match (highest priority, immediate for barcode scanners)
+      const exactBarcode = posCatalog.find(
+        (p) => p.barcode && p.barcode.toLowerCase() === q
+      );
+      if (exactBarcode) return [exactBarcode];
+
+      // 2. Exact SKU match
+      const exactSku = posCatalog.find((p) => p.sku.toLowerCase() === q);
+      if (exactSku) return [exactSku];
+
+      // 3. Multi-token match across name, SKU, and barcode
+      const tokens = q.split(/\s+/).filter(Boolean);
+      return posCatalog
+        .filter((p) => {
+          const name = p.name.toLowerCase();
+          const sku = p.sku.toLowerCase();
+          const barcode = (p.barcode || '').toLowerCase();
+          return tokens.every(
+            (token) =>
+              name.includes(token) || sku.includes(token) || barcode.includes(token)
+          );
+        })
+        .slice(0, 30);
+    }
+
+    // Fallback to server results only if catalog is still fetching
+    return serverResults;
+  }, [searchQuery, posCatalog, serverResults]);
+
+  // Fallback server query only when catalog has not finished initial load
+  useEffect(() => {
+    if (!searchQuery.trim() || posCatalog.length > 0) {
+      setServerResults([]);
       return;
     }
 
+    let isMounted = true;
     const timer = setTimeout(async () => {
-      setIsSearching(true);
+      setIsServerSearching(true);
       try {
         const results = await lookupPosItemsFn({ data: { query: searchQuery } });
-        setSearchResults(results);
+        if (isMounted) setServerResults(results);
       } catch (err) {
         console.error(err);
       } finally {
-        setIsSearching(false);
+        if (isMounted) setIsServerSearching(false);
       }
     }, 150);
 
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, posCatalog.length]);
 
   // Load customers when modal opens
   useEffect(() => {
@@ -183,7 +244,6 @@ function PosComponent() {
       ]);
     }
     setSearchQuery('');
-    setSearchResults([]);
     searchInputRef.current?.focus();
   };
 
@@ -194,15 +254,15 @@ function PosComponent() {
 
     let qty: number;
     if (typeof val === 'string') {
-      const clean = val.replace(/,/g, '').trim();
+      const clean = val.replace(/[^0-9]/g, '').trim();
       if (clean === '') {
         qty = 0;
       } else {
-        qty = parseFloat(clean);
+        qty = parseInt(clean, 10);
         if (isNaN(qty)) qty = 0;
       }
     } else {
-      qty = val;
+      qty = Math.round(val);
     }
 
     if (qty <= 0) {
@@ -359,6 +419,7 @@ function PosComponent() {
       await queryClient.invalidateQueries({ queryKey: ['inventory'] });
       await queryClient.invalidateQueries({ queryKey: ['reports'] });
       await queryClient.invalidateQueries({ queryKey: ['customers'] });
+      await queryClient.invalidateQueries({ queryKey: ['pos-catalog'] });
 
       // Reset cart and generate new idempotency key
       setCart([]);
@@ -388,12 +449,33 @@ function PosComponent() {
             placeholder="Scan barcode or search product by name/SKU... (F2)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-xs"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (searchResults.length > 0) {
+                  addToCart(searchResults[0]);
+                }
+              }
+            }}
+            className="w-full pl-9 pr-24 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-xs"
           />
-          {isSearching && (
+          {isCatalogLoading && posCatalog.length === 0 ? (
+            <div className="absolute right-3 top-3 text-xs text-slate-400 animate-pulse">Loading catalog...</div>
+          ) : isServerSearching ? (
             <div className="absolute right-3 top-3 text-xs text-slate-400 animate-pulse">Searching...</div>
-          )}
+          ) : posCatalog.length > 0 ? (
+            <div className="absolute right-3 top-2.5 flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full select-none pointer-events-none">
+              <Zap className="w-3 h-3 text-emerald-500" />
+              <span>Instant</span>
+            </div>
+          ) : null}
         </div>
+
+        {searchQuery.trim() && searchResults.length === 0 && (
+          <div className="mb-4 p-4 rounded-lg border border-slate-200 bg-slate-50 text-center text-xs text-slate-500">
+            No active products found matching "{searchQuery}"
+          </div>
+        )}
 
         {/* Search Results Dropdown / Grid */}
         {searchResults.length > 0 && (
@@ -540,7 +622,7 @@ function PosComponent() {
                   <input
                     type="text"
                     inputMode="numeric"
-                    pattern="[0-9]*[.,]?[0-9]*"
+                    pattern="[0-9]*"
                     value={item.quantity}
                     onChange={(e) => updateQuantity(index, e.target.value)}
                     onFocus={(e) => e.target.select()}

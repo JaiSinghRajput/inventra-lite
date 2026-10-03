@@ -4,6 +4,12 @@ import { resolveTenantContext } from '../auth/middleware';
 import { BillingService } from './service';
 import { checkoutBillSchema, cancelBillSchema } from './schemas';
 
+export const getPosCatalogFn = createServerFn({ method: 'GET' })
+  .handler(async () => {
+    const context = await resolveTenantContext();
+    return await BillingService.getPosCatalog(context);
+  });
+
 export const lookupPosItemsFn = createServerFn({ method: 'GET' })
   .validator((params: unknown) => z.object({ query: z.string() }).parse(params))
   .handler(async ({ data }) => {

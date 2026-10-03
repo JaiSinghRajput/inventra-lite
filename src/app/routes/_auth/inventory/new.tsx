@@ -67,12 +67,16 @@ function NewProductComponent() {
     const parsedStock = parseCleanQuantity(initialStock, true);
     if (parsedStock < 0) {
       errs.initialStock = 'Initial stock quantity cannot be negative';
+    } else if (initialStock.includes('.') || !Number.isInteger(parsedStock)) {
+      errs.initialStock = 'Stock quantity must be a whole integer';
     }
 
     if (lowStockThreshold.trim()) {
       const parsedThreshold = parseCleanQuantity(lowStockThreshold, true);
       if (parsedThreshold < 0) {
         errs.lowStockThreshold = 'Low stock alert threshold cannot be negative';
+      } else if (lowStockThreshold.includes('.') || !Number.isInteger(parsedThreshold)) {
+        errs.lowStockThreshold = 'Low stock threshold must be a whole integer';
       }
     }
 
@@ -235,12 +239,13 @@ function NewProductComponent() {
                 <Input
                   label="Initial Stock Quantity"
                   type="text"
-                  inputMode="decimal"
-                  pattern="[0-9]*[.,]?[0-9]*"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   placeholder="0"
                   value={initialStock}
                   onChange={(e) => {
-                    setInitialStock(e.target.value);
+                    const clean = e.target.value.replace(/[^0-9]/g, '');
+                    setInitialStock(clean);
                     if (fieldErrors.initialStock) setFieldErrors({ ...fieldErrors, initialStock: '' });
                   }}
                   onFocus={(e) => e.target.select()}
@@ -253,17 +258,18 @@ function NewProductComponent() {
                 <Input
                   label="Low Stock Alert (Optional)"
                   type="text"
-                  inputMode="decimal"
-                  pattern="[0-9]*[.,]?[0-9]*"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   placeholder="Leave empty for none"
                   value={lowStockThreshold}
                   onChange={(e) => {
-                    setLowStockThreshold(e.target.value);
+                    const clean = e.target.value.replace(/[^0-9]/g, '');
+                    setLowStockThreshold(clean);
                     if (fieldErrors.lowStockThreshold) setFieldErrors({ ...fieldErrors, lowStockThreshold: '' });
                   }}
                   onFocus={(e) => e.target.select()}
                   error={fieldErrors.lowStockThreshold}
-                  helperText="Alert when stock falls to this"
+                  helperText="Alert when stock falls to or below this whole number"
                 />
               </div>
             </div>
