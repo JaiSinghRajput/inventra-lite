@@ -117,6 +117,8 @@ export const auth = betterAuth({
     'http://127.0.0.1:5173',
     'http://127.0.0.1:4173',
     'https://inventra-lite.vercel.app',
+    'https://*.vercel.app',
     ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
+    ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
   ],
 });

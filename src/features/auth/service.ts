@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { db } from '../../server/db';
-import { tenants, user } from '../../server/db/schema';
+import { tenants, user, account, tenantMemberships } from '../../server/db/schema';
 import { generateId } from '../../server/utils/id';
 import { auth } from './auth-server';
 import type { RegisterStoreInput } from './schemas';
@@ -9,7 +9,16 @@ export class AuthService {
   static async registerStore(input: RegisterStoreInput) {
     const existingUser = await db.select().from(user).where(eq(user.email, input.email.toLowerCase().trim())).limit(1);
     if (existingUser.length > 0) {
-      throw new Error('An account with this email address already exists');
+      const existingAccount = await db
+        .select()
+        .from(account)
+        .where(and(eq(account.userId, existingUser[0].id), eq(account.providerId, 'credential')))
+        .limit(1);
+
+      if (existingAccount.length === 0) {
+        throw new Error('An account with this email was created via Google Sign-In. Please sign in with Google.');
+      }
+      throw new Error('An account with this email address already exists. Please sign in.');
     }
 
     // Derive 3-to-4 letter uppercase prefix from store name (e.g. "Raj Hardware" -> "RAJ")
@@ -41,6 +50,16 @@ export class AuthService {
         role: 'OWNER',
         isActive: true,
       },
+    });
+
+    // Explicitly create tenant membership record for the new store owner
+    const membershipId = generateId('mem');
+    await db.insert(tenantMemberships).values({
+      id: membershipId,
+      tenantId,
+      userId: newUser.user.id,
+      role: 'OWNER',
+      isActive: true,
     });
 
     return {

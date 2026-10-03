@@ -16,13 +16,17 @@ function LoginComponent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
+  const [successMessage, setSuccessMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Check URL query parameters for OAuth error (e.g. ?error=access_denied or ?error_description=...)
+  // Check URL query parameters for OAuth error or registration success
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
+      if (params.get('registered')) {
+        setSuccessMessage('Store registered successfully! Please sign in with your email and password.');
+      }
       const urlError = params.get('error') || params.get('error_description') || params.get('message');
       if (urlError) {
         if (urlError.toLowerCase().includes('access_denied')) {
@@ -41,13 +45,13 @@ function LoginComponent() {
     let isMounted = true;
     authClient.getSession().then((res) => {
       if (res?.data?.user && isMounted) {
-        navigate({ to: '/pos', replace: true });
+        window.location.href = '/pos';
       }
     }).catch(() => {});
     return () => {
       isMounted = false;
     };
-  }, [navigate]);
+  }, []);
 
   const validateForm = () => {
     const cleanEmail = email.trim().toLowerCase();
@@ -72,6 +76,7 @@ function LoginComponent() {
     if (!validateForm()) return;
 
     setError('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
@@ -82,9 +87,15 @@ function LoginComponent() {
       });
 
       if (res?.error) {
-        setError(res.error.message || 'Invalid email or password');
+        const msg = res.error.message || '';
+        if (msg.toLowerCase().includes('invalid') || (res.error as any).code === 'INVALID_EMAIL_OR_PASSWORD') {
+          setError('Invalid email or password. If you originally registered with Google, please use "Continue with Google" below.');
+        } else {
+          setError(res.error.message || 'Login failed. Please check your credentials.');
+        }
       } else {
-        navigate({ to: '/pos' });
+        // Direct browser navigation ensures session cookies are cleanly sent with SSR/server functions
+        window.location.href = '/pos';
       }
     } catch (err: any) {
       setError(err?.message || 'Login failed. Please check your credentials.');
@@ -125,6 +136,12 @@ function LoginComponent() {
         <Card className="shadow-md border-slate-200">
           <h3 className="text-base font-semibold text-slate-900 mb-1">Staff / Owner Login</h3>
           <p className="text-xs text-slate-500 mb-4">Enter your account credentials to access your store register.</p>
+
+          {successMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
+              {successMessage}
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">

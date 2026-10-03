@@ -43,13 +43,13 @@ function RegisterComponent() {
     let isMounted = true;
     authClient.getSession().then((res) => {
       if (res?.data?.user && isMounted) {
-        navigate({ to: '/pos', replace: true });
+        window.location.href = '/pos';
       }
     }).catch(() => {});
     return () => {
       isMounted = false;
     };
-  }, [navigate]);
+  }, []);
 
   const validateForm = () => {
     if (!storeName.trim()) {
@@ -103,9 +103,10 @@ function RegisterComponent() {
       });
 
       if (signInRes?.error) {
-        navigate({ to: '/login' });
+        window.location.href = '/login?registered=true';
       } else {
-        navigate({ to: '/pos' });
+        // Direct browser navigation guarantees fresh cookie propagation to SSR and server functions
+        window.location.href = '/pos';
       }
     } catch (err: any) {
       setError(err?.message || 'Registration failed. Please try again.');
