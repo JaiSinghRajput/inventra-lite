@@ -22,6 +22,12 @@ export default defineConfig({
       server: {
         entry: 'app/ssr.tsx',
       },
+      start: {
+        entry: 'app/start.ts',
+      },
+      serverFns: {
+        disableCsrfMiddlewareWarning: true,
+      },
     }),
     nitro({
       preset: process.env.VERCEL ? 'vercel' : undefined,

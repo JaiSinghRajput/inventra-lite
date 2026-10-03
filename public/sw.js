@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventra-lite-v1';
+const CACHE_NAME = 'inventra-lite-v2';
 
 const STATIC_ASSETS = [
   '/',
@@ -39,23 +39,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Bypass API requests, Better Auth, and TanStack Start Server Functions
+  // Bypass API requests, Better Auth, and TanStack Start Server Functions so the browser fetches them natively
   if (
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/_server') ||
+    url.pathname.startsWith('/_serverFn') ||
     url.pathname.includes('better-auth')
   ) {
-    event.respondWith(
-      fetch(request).catch(() => {
-        return new Response(
-          JSON.stringify({ error: 'Network unavailable. Please reconnect to continue.' }),
-          {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' }
-          }
-        );
-      })
-    );
     return;
   }
 
