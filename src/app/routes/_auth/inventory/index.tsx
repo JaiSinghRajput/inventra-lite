@@ -156,8 +156,9 @@ function InventoryListComponent() {
           {/* View Mode Toggle */}
           <div className="hidden sm:flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
             <button
+              type="button"
               onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-md text-xs font-medium transition-colors ${
+              className={`p-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                 viewMode === 'table' || viewMode === 'auto'
                   ? 'bg-white text-slate-800 shadow-2xs font-semibold'
                   : 'text-slate-500 hover:text-slate-700'
@@ -167,8 +168,9 @@ function InventoryListComponent() {
               <List className="w-3.5 h-3.5" />
             </button>
             <button
+              type="button"
               onClick={() => setViewMode('cards')}
-              className={`p-1.5 rounded-md text-xs font-medium transition-colors ${
+              className={`p-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                 viewMode === 'cards'
                   ? 'bg-white text-slate-800 shadow-2xs font-semibold'
                   : 'text-slate-500 hover:text-slate-700'
@@ -202,8 +204,9 @@ function InventoryListComponent() {
             />
             {search && (
               <button
+                type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-2.5 text-xs text-slate-400 hover:text-slate-600"
+                className="absolute right-2.5 top-2.5 text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 ✕
               </button>
@@ -214,6 +217,7 @@ function InventoryListComponent() {
         {/* Stock Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
           <button
+            type="button"
             onClick={() => setStockFilter('all')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer shrink-0 ${
               stockFilter === 'all'
@@ -230,6 +234,7 @@ function InventoryListComponent() {
           </button>
 
           <button
+            type="button"
             onClick={() => setStockFilter('low')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer shrink-0 ${
               stockFilter === 'low'
@@ -247,6 +252,7 @@ function InventoryListComponent() {
           </button>
 
           <button
+            type="button"
             onClick={() => setStockFilter('out')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer shrink-0 ${
               stockFilter === 'out'
@@ -264,6 +270,7 @@ function InventoryListComponent() {
           </button>
 
           <button
+            type="button"
             onClick={() => setStockFilter('in')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer shrink-0 ${
               stockFilter === 'in'

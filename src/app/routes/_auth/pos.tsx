@@ -506,9 +506,17 @@ function PosComponent() {
               const isOut = stock <= 0;
 
               return (
-                <button
+                <div
                   key={product.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => addToCart(product)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      addToCart(product);
+                    }
+                  }}
                   className="w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-brand-50 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0 pr-3">
@@ -555,7 +563,7 @@ function PosComponent() {
                   <div className="text-sm font-bold text-brand-700 shrink-0">
                     {formatINR(product.sellingPrice)}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
