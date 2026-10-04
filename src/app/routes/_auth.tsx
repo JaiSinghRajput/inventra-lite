@@ -4,6 +4,7 @@ import { getViewerFn } from '../../features/auth/server';
 import { AppHeader } from '../../components/layout/app-header';
 import { DesktopNav } from '../../components/layout/desktop-nav';
 import { MobileBottomNav } from '../../components/layout/mobile-bottom-nav';
+import { RouteLoadingPill } from '../../components/feedback/route-loading-pill';
 
 export const Route = createFileRoute('/_auth')({
   loader: async () => {
@@ -58,7 +59,8 @@ function AuthLayoutComponent() {
   const viewer = Route.useLoaderData();
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-slate-50 relative">
+      <RouteLoadingPill />
       <AppHeader
         storeName={viewer.tenant?.name || 'Inventra Lite'}
         userName={viewer.user?.userName || 'User'}

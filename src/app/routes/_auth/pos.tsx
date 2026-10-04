@@ -770,7 +770,7 @@ function PosComponent() {
       {/* ========================================================================= */}
       {/* MOBILE 4-STEP PROGRESS BAR (Only on mobile < md)                          */}
       {/* ========================================================================= */}
-      <div className="md:hidden bg-white border-b border-slate-200 px-2 py-2 shadow-xs mb-3 -mx-3 -mt-3 sticky top-0 z-30">
+      <div className="md:hidden bg-white border-b border-slate-200 px-2 py-2 shadow-xs mb-3 -mx-3 -mt-3 sticky top-0 z-20">
         <div className="flex items-center justify-between gap-1 text-[11px]">
           {/* Step 1: Customer */}
           <button
@@ -863,7 +863,7 @@ function PosComponent() {
       {/* ========================================================================= */}
       {/* MOBILE STEP 1: SMART PHONE-FIRST CUSTOMER LOOKUP & CREATE                 */}
       {/* ========================================================================= */}
-      <div className={`md:hidden flex-1 flex-col space-y-4 pb-16 ${mobileStep === 1 ? 'flex' : 'hidden'}`}>
+      <div className={`md:hidden flex-1 flex-col space-y-4 pb-16 pt-2 ${mobileStep === 1 ? 'flex' : 'hidden'}`}>
         {selectedCustomer && (
           <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/70 flex items-center justify-between shadow-xs">
             <div className="flex items-center gap-2.5">
@@ -888,38 +888,40 @@ function PosComponent() {
         )}
 
         {/* Walk-in Guest Card */}
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedCustomer(null);
-            setMobileStep(2);
-          }}
-          className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer shadow-xs ${
-            !selectedCustomer
-              ? 'border-brand-500 bg-brand-50/40 ring-2 ring-brand-400'
-              : 'border-slate-200 bg-white hover:border-brand-300'
-          }`}
-        >
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
-              <ShoppingBag className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                <span>Walk-in Customer (Guest)</span>
-                {!selectedCustomer && (
-                  <span className="text-[10px] bg-brand-600 text-white px-2 py-0.5 rounded-full font-bold">
-                    Active
-                  </span>
-                )}
+        <div className="relative pt-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCustomer(null);
+              setMobileStep(2);
+            }}
+            className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer shadow-xs ${
+              !selectedCustomer
+                ? 'border-brand-500 bg-brand-50/40 ring-2 ring-brand-400'
+                : 'border-slate-200 bg-white hover:border-brand-300'
+            }`}
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
+                <ShoppingBag className="w-6 h-6" />
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Fast 1-tap checkout without customer records (Cash, UPI, Card)
-              </p>
+              <div>
+                <div className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <span>Walk-in Customer (Guest)</span>
+                  {!selectedCustomer && (
+                    <span className="text-[10px] bg-brand-600 text-white px-2 py-0.5 rounded-full font-bold">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Fast 1-tap checkout without customer records (Cash, UPI, Card)
+                </p>
+              </div>
             </div>
-          </div>
-          <ArrowRight className="w-5 h-5 text-brand-600 shrink-0 ml-2" />
-        </button>
+            <ArrowRight className="w-5 h-5 text-brand-600 shrink-0 ml-2" />
+          </button>
+        </div>
 
         {/* Smart Phone-First Lookup & Inline Creation */}
         <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-3">

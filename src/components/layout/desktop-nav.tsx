@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import {
   Calculator,
@@ -8,6 +8,7 @@ import {
   Users,
   BarChart3,
   Settings,
+  Loader2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -34,6 +35,15 @@ interface DesktopNavProps {
 export const DesktopNav: React.FC<DesktopNavProps> = ({ role }) => {
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+  const isNavPending = routerState.status === 'pending';
+  const pendingPath = (routerState as any)?.pendingLocation?.pathname || '';
+  const [clickedTarget, setClickedTarget] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isNavPending) {
+      setClickedTarget(null);
+    }
+  }, [isNavPending, currentPath]);
 
   const filteredNavItems = navItems.filter((item) => {
     if (role === 'CASHIER') {
@@ -49,19 +59,39 @@ export const DesktopNav: React.FC<DesktopNavProps> = ({ role }) => {
         {filteredNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPath === item.to || currentPath.startsWith(item.to + '/');
+          const isItemLoading =
+            (isNavPending && (pendingPath === item.to || pendingPath.startsWith(item.to + '/'))) ||
+            clickedTarget === item.to;
 
           return (
             <Link
               key={item.to}
               to={item.to}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
+              preload="intent"
+              onClick={() => {
+                if (!isActive) {
+                  setClickedTarget(item.to);
+                }
+              }}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                isItemLoading
+                  ? 'bg-brand-50 text-brand-700 font-semibold ring-1 ring-brand-200 shadow-2xs'
+                  : isActive
                   ? 'bg-brand-50 text-brand-700 font-semibold'
                   : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-brand-600' : 'text-slate-400'}`} />
-              {item.label}
+              {isItemLoading ? (
+                <Loader2 className="w-4 h-4 text-brand-600 animate-spin shrink-0" />
+              ) : (
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-brand-600' : 'text-slate-400'}`} />
+              )}
+              <span className="truncate">{item.label}</span>
+              {isItemLoading && (
+                <span className="text-[10px] bg-brand-100 text-brand-700 font-bold px-1.5 py-0.5 rounded ml-auto animate-pulse">
+                  Loading
+                </span>
+              )}
             </Link>
           );
         })}

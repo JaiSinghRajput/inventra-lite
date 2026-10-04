@@ -1,6 +1,22 @@
 import { eq, and } from 'drizzle-orm';
 import { db } from '../../server/db';
-import { tenantMemberships, user, tenants, auditLogs } from '../../server/db/schema';
+import {
+  tenantMemberships,
+  user,
+  tenants,
+  auditLogs,
+  bills,
+  billItems,
+  billCharges,
+  payments,
+  purchases,
+  purchaseItems,
+  suppliers,
+  stockMovements,
+  products,
+  customers,
+  customerLedgerEntries,
+} from '../../server/db/schema';
 import { generateId } from '../../server/utils/id';
 import { enforceOwner, enforceManagerOrOwner, type TenantContext, type Role } from '../auth/middleware';
 
@@ -242,4 +258,73 @@ export class StaffService {
 
     return { success: true, tenantId: newTenantId, name: storeName };
   }
+
+  static async deleteStore(context: TenantContext, input: { tenantId: string }) {
+    const targetTenantId = input.tenantId.trim();
+    if (!targetTenantId) {
+      throw new Error('Tenant ID is required.');
+    }
+
+    // Verify caller is an active OWNER of this store
+    const [membership] = await db
+      .select()
+      .from(tenantMemberships)
+      .where(
+        and(
+          eq(tenantMemberships.tenantId, targetTenantId),
+          eq(tenantMemberships.userId, context.userId),
+          eq(tenantMemberships.isActive, true)
+        )
+      )
+      .limit(1);
+
+    if (!membership || membership.role !== 'OWNER') {
+      throw new Error('Only an Owner of this store is authorized to delete it.');
+    }
+
+    // Perform atomic cascading cleanup of all store-associated entities
+    await db.transaction(async (tx) => {
+      // 1. Invoices & Billing
+      await tx.delete(billCharges).where(eq(billCharges.tenantId, targetTenantId));
+      await tx.delete(billItems).where(eq(billItems.tenantId, targetTenantId));
+      await tx.delete(payments).where(eq(payments.tenantId, targetTenantId));
+      await tx.delete(bills).where(eq(bills.tenantId, targetTenantId));
+
+      // 2. Purchases & Suppliers
+      await tx.delete(purchaseItems).where(eq(purchaseItems.tenantId, targetTenantId));
+      await tx.delete(purchases).where(eq(purchases.tenantId, targetTenantId));
+      await tx.delete(suppliers).where(eq(suppliers.tenantId, targetTenantId));
+
+      // 3. Inventory & Products
+      await tx.delete(stockMovements).where(eq(stockMovements.tenantId, targetTenantId));
+      await tx.delete(products).where(eq(products.tenantId, targetTenantId));
+
+      // 4. Customers & Khata Ledgers
+      await tx.delete(customerLedgerEntries).where(eq(customerLedgerEntries.tenantId, targetTenantId));
+      await tx.delete(customers).where(eq(customers.tenantId, targetTenantId));
+
+      // 5. Audit logs
+      await tx.delete(auditLogs).where(eq(auditLogs.tenantId, targetTenantId));
+
+      // 6. Dissociate users who had this tenant as active default
+      await tx.update(user).set({ tenantId: null }).where(eq(user.tenantId, targetTenantId));
+
+      // 7. Delete memberships
+      await tx.delete(tenantMemberships).where(eq(tenantMemberships.tenantId, targetTenantId));
+
+      // 8. Delete tenant record
+      await tx.delete(tenants).where(eq(tenants.id, targetTenantId));
+    });
+
+    // Check if user has any remaining active stores
+    const remaining = await db
+      .select({ tenantId: tenantMemberships.tenantId })
+      .from(tenantMemberships)
+      .where(and(eq(tenantMemberships.userId, context.userId), eq(tenantMemberships.isActive, true)))
+      .limit(1);
+
+    const nextTenantId = remaining.length > 0 ? remaining[0].tenantId : null;
+    return { success: true, nextTenantId };
+  }
 }
+

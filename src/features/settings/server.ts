@@ -100,3 +100,17 @@ export const createNewStoreFn = createServerFn({ method: 'POST' })
     return await StaffService.createStore(context, data);
   });
 
+export const deleteStoreFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown) =>
+    z
+      .object({
+        tenantId: z.string().min(1),
+      })
+      .parse(data)
+  )
+  .handler(async ({ data }) => {
+    const context = await resolveTenantContext();
+    return await StaffService.deleteStore(context, data);
+  });
+
+
