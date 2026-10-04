@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, getRouteApi } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Store, Save, Percent, FileText, Trash2, AlertTriangle } from 'lucide-react';
 import { getStoreSettingsFn, updateStoreSettingsFn, deleteStoreFn } from '../../../../features/settings/server';
@@ -9,12 +9,18 @@ import { Card } from '../../../../components/ui/card';
 import { Modal } from '../../../../components/ui/modal';
 import { toast } from 'sonner';
 
+const authRoute = getRouteApi('/_auth');
+
 export const Route = createFileRoute('/_auth/settings/store')({
   component: StoreSettingsComponent,
 });
 
 function StoreSettingsComponent() {
   const queryClient = useQueryClient();
+  const viewer = authRoute.useLoaderData();
+  const userRole = viewer?.user?.role || 'CASHIER';
+  const isOwner = userRole === 'OWNER';
+
   const [name, setName] = useState('');
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [defaultTaxRate, setDefaultTaxRate] = useState('0.00');
@@ -172,91 +178,95 @@ function StoreSettingsComponent() {
         </form>
       </Card>
 
-      {/* Danger Zone: Delete Store */}
-      <Card className="border-rose-200 bg-rose-50/20">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700">
-                Danger Zone
-              </span>
+      {/* Danger Zone: Delete Store (Only visible to OWNER / Admin) */}
+      {isOwner && (
+        <>
+          <Card className="border-rose-200 bg-rose-50/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700">
+                    Danger Zone
+                  </span>
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 mt-1">Delete This Store</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Permanently delete <strong>{store?.name || 'this store'}</strong> and all of its associated products, inventory, bills, customers, and reports.
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => setIsDeleteModalOpen(true)}
+                className="shrink-0"
+              >
+                <Trash2 className="w-4 h-4 mr-1.5" /> Delete Store
+              </Button>
             </div>
-            <h3 className="text-sm font-bold text-slate-900 mt-1">Delete This Store</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Permanently delete <strong>{store?.name || 'this store'}</strong> and all of its associated products, inventory, bills, customers, and reports.
-            </p>
-          </div>
+          </Card>
 
-          <Button
-            type="button"
-            variant="danger"
-            onClick={() => setIsDeleteModalOpen(true)}
-            className="shrink-0"
-          >
-            <Trash2 className="w-4 h-4 mr-1.5" /> Delete Store
-          </Button>
-        </div>
-      </Card>
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => {
-          if (!isDeleting) {
-            setIsDeleteModalOpen(false);
-            setDeleteConfirmText('');
-          }
-        }}
-        title="Delete Store"
-        description="Permanently erase this store and all of its associated data."
-      >
-        <form onSubmit={handleDeleteStore} className="space-y-4">
-          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5">
-            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-            <div className="text-xs text-rose-800 space-y-1">
-              <p className="font-semibold">Warning: This action cannot be undone.</p>
-              <p>
-                Deleting <strong>{store?.name}</strong> will permanently remove all stock entries, bills, customers, invoices, and accounting history for this tenant.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Type <span className="font-mono font-bold text-rose-600">{store?.name}</span> to confirm:
-            </label>
-            <Input
-              value={deleteConfirmText}
-              onChange={(e) => setDeleteConfirmText(e.target.value)}
-              placeholder={store?.name}
-              required
-              autoFocus
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
+          {/* Delete Confirmation Modal */}
+          <Modal
+            isOpen={isDeleteModalOpen}
+            onClose={() => {
+              if (!isDeleting) {
                 setIsDeleteModalOpen(false);
                 setDeleteConfirmText('');
-              }}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="danger"
-              isLoading={isDeleting}
-              disabled={deleteConfirmText.trim() !== store?.name?.trim()}
-            >
-              <Trash2 className="w-4 h-4 mr-1" /> Delete Store
-            </Button>
-          </div>
-        </form>
-      </Modal>
+              }
+            }}
+            title="Delete Store"
+            description="Permanently erase this store and all of its associated data."
+          >
+            <form onSubmit={handleDeleteStore} className="space-y-4">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-rose-800 space-y-1">
+                  <p className="font-semibold">Warning: This action cannot be undone.</p>
+                  <p>
+                    Deleting <strong>{store?.name}</strong> will permanently remove all stock entries, bills, customers, invoices, and accounting history for this tenant.
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Type <span className="font-mono font-bold text-rose-600">{store?.name}</span> to confirm:
+                </label>
+                <Input
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder={store?.name}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setDeleteConfirmText('');
+                  }}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="danger"
+                  isLoading={isDeleting}
+                  disabled={deleteConfirmText.trim() !== store?.name?.trim()}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" /> Delete Store
+                </Button>
+              </div>
+            </form>
+          </Modal>
+        </>
+      )}
     </div>
   );
 }
