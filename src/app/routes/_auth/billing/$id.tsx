@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
+import { createFileRoute, Link, useRouter, getRouteApi } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Printer, Ban, CreditCard, RotateCcw, AlertCircle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,6 +12,8 @@ import { Input } from '../../../../components/ui/input';
 import { Badge } from '../../../../components/ui/badge';
 import { Card } from '../../../../components/ui/card';
 import { Modal } from '../../../../components/ui/modal';
+
+const authRoute = getRouteApi('/_auth');
 
 export const Route = createFileRoute('/_auth/billing/$id')({
   loader: async ({ params }) => {
@@ -46,6 +48,11 @@ function BillDetailComponent() {
   }
 
   const { bill, items, charges, payments, customer } = data;
+  const viewer = authRoute.useLoaderData();
+  const storeName = viewer?.tenant?.name || 'Inventra Lite';
+
+  const itemDiscountsTotal = items.reduce((sum: number, it: any) => sum + (it.lineDiscount || 0), 0);
+  const totalDiscount = (bill.discountTotal || 0) + itemDiscountsTotal;
 
   // Pay Due Balance Modal
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
@@ -209,19 +216,19 @@ function BillDetailComponent() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => window.print()}>
+        <div className="grid grid-cols-1 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+          <Button variant="outline" size="sm" onClick={() => window.print()} className="w-full sm:w-auto justify-center">
             <Printer className="w-4 h-4" /> Print Receipt
           </Button>
 
           {bill.status !== 'cancelled' && bill.dueAmount > 0 && (
-            <Button size="sm" onClick={() => setIsPayModalOpen(true)}>
+            <Button size="sm" onClick={() => setIsPayModalOpen(true)} className="w-full sm:w-auto justify-center">
               <CreditCard className="w-4 h-4" /> Pay Due ({formatINR(bill.dueAmount)})
             </Button>
           )}
 
           {bill.status !== 'cancelled' && (
-            <Button variant="danger" size="sm" onClick={() => setIsCancelModalOpen(true)}>
+            <Button variant="danger" size="sm" onClick={() => setIsCancelModalOpen(true)} className="w-full sm:w-auto justify-center">
               <Ban className="w-4 h-4" /> Cancel Bill
             </Button>
           )}
@@ -240,7 +247,9 @@ function BillDetailComponent() {
 
       {/* Printable Receipt Scaffolding for 80mm printer */}
       <div id="printable-receipt" className="hidden print:block border border-slate-300 p-4 font-mono text-xs space-y-2">
-        <div className="text-center font-bold text-sm">INVENTRA LITE</div>
+        <div className="text-center font-bold text-sm uppercase tracking-wide border-b pb-1">
+          {storeName}
+        </div>
         <div className="flex justify-between text-[11px]">
           <span>Invoice: {bill.billNumber}</span>
           <span>{new Date(bill.createdAt).toLocaleDateString()}</span>
@@ -264,6 +273,12 @@ function BillDetailComponent() {
             </div>
           ))}
         </div>
+        {totalDiscount > 0 && (
+          <div className="flex justify-between text-[11px] font-semibold text-slate-700">
+            <span>Discount:</span>
+            <span>-{formatINR(totalDiscount)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold pt-1">
           <span>GRAND TOTAL:</span>
           <span>{formatINR(bill.grandTotal)}</span>
@@ -274,6 +289,9 @@ function BillDetailComponent() {
         </div>
         <div className="text-center text-[10px] text-slate-500 pt-2 border-t">
           Thank you for your business!
+        </div>
+        <div className="text-center text-[9px] text-slate-400 font-sans tracking-wider uppercase pt-2 border-t mt-1 opacity-60">
+          Powered by Inventra Lite
         </div>
       </div>
 

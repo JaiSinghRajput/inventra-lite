@@ -26,5 +26,7 @@
     padding: 2mm;
     font-size: 11px;
     line-height: 1.25;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventra-lite-v3';
+const CACHE_NAME = 'inventra-lite-v4';
 
 const STATIC_ASSETS = [
   '/',
@@ -38,19 +38,21 @@ self.addEventListener('fetch', (event) => {
   }
 
   const url = new URL(request.url);
+  const acceptHeader = request.headers.get('accept') || '';
 
-  // Bypass API requests, Better Auth, and TanStack Start Server Functions so the browser fetches them natively
+  // Bypass API requests, Better Auth, server functions, and JSON data requests so the browser fetches them natively
   if (
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/_server') ||
     url.pathname.startsWith('/_serverFn') ||
     url.pathname.includes('better-auth') ||
-    request.headers.get('x-tsr-serverfn') === 'true'
+    request.headers.get('x-tsr-serverfn') === 'true' ||
+    acceptHeader.includes('application/json')
   ) {
     return;
   }
 
-  // Navigation requests: Network first, fall back to cached shell or offline page
+  // Navigation requests: Network first, fall back to cached page, cached root, or offline shell
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -67,7 +69,7 @@ self.addEventListener('fetch', (event) => {
           const rootCached = await caches.match('/');
           if (rootCached) return rootCached;
           return new Response(
-            '<!DOCTYPE html><html><body><h2>Offline</h2><p>Please check your internet connection.</p></body></html>',
+            '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Offline</title></head><body style="font-family: sans-serif; text-align: center; padding: 2rem;"><h2>Offline</h2><p>Please check your internet connection.</p></body></html>',
             { headers: { 'Content-Type': 'text/html' } }
           );
         })
@@ -85,6 +87,16 @@ self.addEventListener('fetch', (event) => {
         }
         return networkResponse;
       })
-      .catch(() => caches.match(request))
+      .catch(async () => {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        // Never return undefined from respondWith handler to prevent TypeError: Failed to convert value to 'Response'
+        return new Response('Network request failed', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'Content-Type': 'text/plain' },
+        });
+      })
   );
 });
+

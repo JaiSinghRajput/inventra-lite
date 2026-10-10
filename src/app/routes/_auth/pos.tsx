@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, getRouteApi } from '@tanstack/react-router';
+
+const authRoute = getRouteApi('/_auth');
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
@@ -117,6 +119,8 @@ function validateCustomerInput(name: string, phone: string): { nameError?: strin
 function PosComponent() {
   const queryClient = useQueryClient();
   const initialCatalog = Route.useLoaderData();
+  const viewer = authRoute.useLoaderData();
+  const storeName = viewer?.tenant?.name || 'Inventra Lite';
 
   // Pre-load and cache active POS product catalog in client memory (5 min stale time)
   const { data: posCatalog = [], isLoading: isCatalogLoading } = useQuery({
@@ -185,6 +189,11 @@ function PosComponent() {
     items: CartItem[];
     payments: PaymentEntry[];
     charges: CartCharge[];
+    discountTotal?: number;
+    paidAmount?: number;
+    dueAmount?: number;
+    customerName?: string;
+    customerPhone?: string | null;
   } | null>(null);
 
   // Full-screen image preview lightbox
@@ -633,6 +642,9 @@ function PosComponent() {
       });
 
       // Bill completed successfully!
+      const totalLineDiscounts = cart.reduce((sum, item) => sum + (item.lineDiscount || 0), 0);
+      const totalDiscount = billDiscount + totalLineDiscounts;
+
       setCompletedBill({
         billId: res.billId,
         billNumber: res.billNumber,
@@ -640,6 +652,11 @@ function PosComponent() {
         items: [...cart],
         payments: [...appliedPayments],
         charges: [...charges],
+        discountTotal: totalDiscount,
+        paidAmount: totalPaidAmount,
+        dueAmount: remainingDue,
+        customerName: selectedCustomer?.name,
+        customerPhone: selectedCustomer?.phone,
       });
 
       await queryClient.invalidateQueries({ queryKey: ['billing'] });
@@ -2693,11 +2710,18 @@ function PosComponent() {
 
             {/* Printable 80mm Receipt Container */}
             <div id="printable-receipt" className="border border-slate-200 rounded-lg p-3 bg-slate-50 text-left text-xs font-mono space-y-2">
-              <div className="text-center font-bold text-sm border-b pb-1">INVENTRA LITE POS</div>
+              <div className="text-center font-bold text-sm uppercase tracking-wide border-b pb-1">
+                {storeName}
+              </div>
               <div className="flex justify-between text-[11px]">
                 <span>Bill: {completedBill.billNumber}</span>
                 <span>{new Date().toLocaleTimeString()}</span>
               </div>
+              {completedBill.customerName && (
+                <div className="text-[11px]">
+                  Customer: {completedBill.customerName} {completedBill.customerPhone ? `(${completedBill.customerPhone})` : ''}
+                </div>
+              )}
               <div className="border-t border-b py-1 space-y-1">
                 {completedBill.items.map((item, idx) => (
                   <div key={idx} className="flex justify-between">
@@ -2712,12 +2736,27 @@ function PosComponent() {
                   </div>
                 ))}
               </div>
+              {completedBill.discountTotal !== undefined && completedBill.discountTotal > 0 && (
+                <div className="flex justify-between text-[11px] font-semibold text-slate-700">
+                  <span>Discount:</span>
+                  <span>-{formatINR(completedBill.discountTotal)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-sm pt-1">
                 <span>TOTAL:</span>
                 <span>{formatINR(completedBill.grandTotal)}</span>
               </div>
+              <div className="flex justify-between text-[11px]">
+                <span>Paid: {formatINR(completedBill.paidAmount ?? completedBill.grandTotal)}</span>
+                {completedBill.dueAmount !== undefined && completedBill.dueAmount > 0 && (
+                  <span>Due: {formatINR(completedBill.dueAmount)}</span>
+                )}
+              </div>
               <div className="text-center text-[10px] text-slate-500 pt-2 border-t">
                 Thank you for your visit!
+              </div>
+              <div className="text-center text-[9px] text-slate-400 font-sans tracking-wider uppercase pt-2 border-t mt-1 opacity-60">
+                Powered by Inventra Lite
               </div>
             </div>
 
