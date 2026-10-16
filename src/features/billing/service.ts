@@ -101,6 +101,7 @@ export class BillingService {
       const verifiedItems: {
         product: typeof lockedProducts[0];
         quantity: number;
+        unitPrice: number;
         lineDiscount: number;
         lineTotal: number;
       }[] = [];
@@ -121,7 +122,8 @@ export class BillingService {
           throw new Error(`Insufficient stock for "${product.name}". Available: ${currentStock} ${product.unit}, requested: ${item.quantity}`);
         }
 
-        const lineGross = Math.round(item.quantity * product.sellingPrice);
+        const unitPrice = typeof item.unitPrice === 'number' && item.unitPrice >= 0 ? item.unitPrice : product.sellingPrice;
+        const lineGross = Math.round(item.quantity * unitPrice);
         const lineDiscount = item.lineDiscount || 0;
 
         // Invariant: lineDiscount <= lineGross
@@ -135,6 +137,7 @@ export class BillingService {
         verifiedItems.push({
           product,
           quantity: item.quantity,
+          unitPrice,
           lineDiscount,
           lineTotal,
         });
@@ -229,7 +232,7 @@ export class BillingService {
           productName: item.product.name,
           sku: item.product.sku,
           unit: item.product.unit,
-          unitPrice: item.product.sellingPrice,
+          unitPrice: item.unitPrice,
           purchasePrice: item.product.purchasePrice,
           quantity: item.quantity.toFixed(3),
           lineDiscount: item.lineDiscount,

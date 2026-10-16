@@ -28,6 +28,8 @@ import {
   DollarSign,
   Receipt,
   Phone,
+  Edit3,
+  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { lookupPosItemsFn, getPosCatalogFn, checkoutBillFn } from '../../../features/billing/server';
@@ -60,6 +62,7 @@ interface CartItem {
   unit: string;
   imageUrl?: string;
   unitPrice: number; // in paise
+  originalPrice?: number; // in paise (catalog sellingPrice)
   quantity: number;
   lineDiscount: number; // in paise
   lineTotal: number; // in paise
@@ -149,6 +152,18 @@ function PosComponent() {
     currentQty: number;
   } | null>(null);
   const [tempQtyInput, setTempQtyInput] = useState<string>('1');
+
+  // Direct Sell Price Edit Popup Modal (Mobile & Quick Edit)
+  const [editingPriceMap, setEditingPriceMap] = useState<Record<string, string>>({});
+  const [priceEditModalItem, setPriceEditModalItem] = useState<{
+    productId: string;
+    name: string;
+    unit: string;
+    unitPrice: number;
+    originalPrice: number;
+    quantity: number;
+  } | null>(null);
+  const [tempPriceInput, setTempPriceInput] = useState<string>('');
 
   // Customer Form & Modal State (Phone-first smart lookup & creation)
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -372,6 +387,7 @@ function PosComponent() {
           unit: product.unit,
           imageUrl: product.imageUrl || undefined,
           unitPrice,
+          originalPrice: unitPrice,
           quantity: 1,
           lineDiscount: 0,
           lineTotal: unitPrice,
@@ -480,6 +496,7 @@ function PosComponent() {
           unit: productInCatalog.unit,
           imageUrl: productInCatalog.imageUrl || undefined,
           unitPrice,
+          originalPrice: unitPrice,
           quantity: qty,
           lineDiscount: 0,
           lineTotal: Math.round(qty * unitPrice),
@@ -509,6 +526,92 @@ function PosComponent() {
     const cleanQty = parseInt(tempQtyInput.replace(/[^0-9]/g, ''), 10) || 0;
     setDirectQuantity(qtyEditModalItem.productId, cleanQty);
     setQtyEditModalItem(null);
+  };
+
+  // Update Cart Item Unit Sell Price
+  const updateUnitPrice = (productId: string, newUnitPricePaise: number) => {
+    if (newUnitPricePaise < 0) return;
+    setCart((prev) => {
+      const idx = prev.findIndex((i) => i.productId === productId);
+      if (idx === -1) return prev;
+      const item = prev[idx];
+      const lineGross = Math.round(item.quantity * newUnitPricePaise);
+      const lineDiscount = Math.min(item.lineDiscount, lineGross);
+      const lineTotal = lineGross - lineDiscount;
+      const next = [...prev];
+      next[idx] = {
+        ...item,
+        unitPrice: newUnitPricePaise,
+        lineDiscount,
+        lineTotal,
+      };
+      return next;
+    });
+  };
+
+  const handlePriceInputChange = (productId: string, val: string) => {
+    setEditingPriceMap((prev) => ({ ...prev, [productId]: val }));
+    const parsedPaise = inrToPaise(val);
+    if (!isNaN(parsedPaise) && parsedPaise >= 0) {
+      updateUnitPrice(productId, parsedPaise);
+    }
+  };
+
+  const handlePriceInputBlur = (productId: string) => {
+    setEditingPriceMap((prev) => {
+      const copy = { ...prev };
+      delete copy[productId];
+      return copy;
+    });
+  };
+
+  const resetUnitPrice = (productId: string) => {
+    setCart((prev) => {
+      const idx = prev.findIndex((i) => i.productId === productId);
+      if (idx === -1) return prev;
+      const item = prev[idx];
+      const targetPrice = item.originalPrice !== undefined ? item.originalPrice : item.unitPrice;
+      const lineGross = Math.round(item.quantity * targetPrice);
+      const lineDiscount = Math.min(item.lineDiscount, lineGross);
+      const lineTotal = lineGross - lineDiscount;
+      const next = [...prev];
+      next[idx] = {
+        ...item,
+        unitPrice: targetPrice,
+        lineDiscount,
+        lineTotal,
+      };
+      return next;
+    });
+    setEditingPriceMap((prev) => {
+      const copy = { ...prev };
+      delete copy[productId];
+      return copy;
+    });
+  };
+
+  // Open direct price editor popup (Mobile & Quick Keypad)
+  const openPricePopup = (item: CartItem) => {
+    setPriceEditModalItem({
+      productId: item.productId,
+      name: item.name,
+      unit: item.unit,
+      unitPrice: item.unitPrice,
+      originalPrice: item.originalPrice ?? item.unitPrice,
+      quantity: item.quantity,
+    });
+    setTempPriceInput(paiseToINR(item.unitPrice).toString());
+  };
+
+  const handleSavePricePopup = () => {
+    if (!priceEditModalItem) return;
+    const cleanPaise = inrToPaise(tempPriceInput);
+    if (isNaN(cleanPaise) || cleanPaise < 0) {
+      toast.error('Please enter a valid non-negative sell price.');
+      return;
+    }
+    updateUnitPrice(priceEditModalItem.productId, cleanPaise);
+    setPriceEditModalItem(null);
   };
 
   // Add Charge
@@ -623,6 +726,7 @@ function PosComponent() {
           items: cart.map((i) => ({
             productId: i.productId,
             quantity: i.quantity,
+            unitPrice: i.unitPrice,
             lineDiscount: i.lineDiscount,
           })),
           charges: charges.map((c) => ({
@@ -1401,8 +1505,22 @@ function PosComponent() {
               <div key={item.productId} className="flex items-center justify-between py-2 px-1 text-xs">
                 <div className="min-w-0 pr-2">
                   <div className="font-semibold text-slate-900 truncate">{item.name}</div>
-                  <div className="text-[11px] text-slate-400">
-                    {item.quantity} {item.unit} × {formatINR(item.unitPrice)}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[11px] text-slate-500">
+                      {item.quantity} {item.unit} ×
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => openPricePopup(item)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-1.5 py-0.5 rounded-md transition-colors"
+                      title="Tap to change sell price"
+                    >
+                      <Edit3 className="w-2.5 h-2.5" />
+                      <span>{formatINR(item.unitPrice)}</span>
+                      {item.originalPrice !== undefined && item.unitPrice !== item.originalPrice && (
+                        <span className="text-[9px] bg-amber-200 text-amber-900 font-bold px-1 rounded">Edited</span>
+                      )}
+                    </button>
                   </div>
                 </div>
                 <div className="font-bold text-slate-900 shrink-0">{formatINR(item.lineTotal)}</div>
@@ -1960,9 +2078,36 @@ function PosComponent() {
                       </div>
                     )}
                     <div className="min-w-0">
-                      <div className="text-xs font-semibold text-slate-900 truncate">{item.name}</div>
-                      <div className="text-[11px] text-slate-500">
-                        {formatINR(item.unitPrice)} / {item.unit}
+                      <div className="text-xs font-semibold text-slate-900 truncate" title={item.name}>{item.name}</div>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-[11px] text-slate-400 font-medium">₹</span>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={editingPriceMap[item.productId] ?? paiseToINR(item.unitPrice)}
+                          onChange={(e) => handlePriceInputChange(item.productId, e.target.value)}
+                          onBlur={() => handlePriceInputBlur(item.productId)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="w-16 h-5 px-1 py-0 text-[11px] font-semibold text-slate-800 bg-white border border-slate-200 rounded hover:border-brand-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
+                          title="Edit selling price for this item"
+                        />
+                        <span className="text-[10px] text-slate-500">/{item.unit}</span>
+                        {item.originalPrice !== undefined && item.unitPrice !== item.originalPrice && (
+                          <button
+                            type="button"
+                            onClick={() => resetUnitPrice(item.productId)}
+                            title={`Reset to default catalog price: ${formatINR(item.originalPrice)}`}
+                            className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1 py-0.5 rounded cursor-pointer transition-colors"
+                          >
+                            <span>Edited</span>
+                            <RotateCcw className="w-2.5 h-2.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2124,8 +2269,20 @@ function PosComponent() {
                 >
                   <div className="min-w-0 pr-2">
                     <div className="font-bold text-xs text-slate-900 truncate">{item.name}</div>
-                    <div className="text-[11px] text-slate-500">
-                      {formatINR(item.unitPrice)} × {item.quantity} {item.unit}
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => openPricePopup(item)}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-1.5 py-0.5 rounded-md transition-colors"
+                        title="Tap to edit sell price"
+                      >
+                        <Edit3 className="w-2.5 h-2.5" />
+                        <span>{formatINR(item.unitPrice)}</span>
+                        <span className="text-brand-500 font-normal">/{item.unit}</span>
+                        {item.originalPrice !== undefined && item.unitPrice !== item.originalPrice && (
+                          <span className="text-[9px] bg-amber-200 text-amber-900 font-bold px-1 rounded">Edited</span>
+                        )}
+                      </button>
                     </div>
                   </div>
 
@@ -2245,6 +2402,111 @@ function PosComponent() {
                 onClick={handleSaveQuantityPopup}
               >
                 Apply Quantity
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ========================================================================= */}
+      {/* POPUP MODAL: DIRECT SELL PRICE EDIT KEYPAD (Mobile & Quick Edit)           */}
+      {/* ========================================================================= */}
+      {priceEditModalItem && (
+        <Modal
+          isOpen={true}
+          onClose={() => setPriceEditModalItem(null)}
+          title={`Edit Sell Price: ${priceEditModalItem.name}`}
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <div className="text-xs text-slate-500 flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span>Catalog Default Price:</span>
+              <span className="font-bold text-slate-800">
+                {formatINR(priceEditModalItem.originalPrice)} / {priceEditModalItem.unit}
+              </span>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                Custom Sell Price per {priceEditModalItem.unit} (₹)
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-bold text-slate-400">₹</span>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={tempPriceInput}
+                  onChange={(e) => setTempPriceInput(e.target.value)}
+                  autoFocus
+                  onFocus={(e) => e.target.select()}
+                  className="w-full text-center text-2xl font-black py-2.5 rounded-xl border border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            {/* Quick Price Actions */}
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setTempPriceInput(paiseToINR(priceEditModalItem.originalPrice).toString())}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+              >
+                Reset Default ({formatINR(priceEditModalItem.originalPrice)})
+              </button>
+              {priceEditModalItem.originalPrice > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const discount5 = Math.round(priceEditModalItem.originalPrice * 0.95);
+                      setTempPriceInput(paiseToINR(discount5).toString());
+                    }}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+                  >
+                    -5% Off
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const discount10 = Math.round(priceEditModalItem.originalPrice * 0.9);
+                      setTempPriceInput(paiseToINR(discount10).toString());
+                    }}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+                  >
+                    -10% Off
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Line Total Summary Preview */}
+            <div className="bg-brand-50/60 border border-brand-200/60 rounded-xl p-3 flex justify-between items-center text-xs">
+              <span className="text-slate-600">
+                Line Total ({priceEditModalItem.quantity} {priceEditModalItem.unit}):
+              </span>
+              <span className="font-black text-brand-800 text-sm">
+                {(() => {
+                  const p = inrToPaise(tempPriceInput);
+                  return !isNaN(p) && p >= 0 ? formatINR(Math.round(priceEditModalItem.quantity * p)) : '₹0.00';
+                })()}
+              </span>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1 text-slate-600"
+                onClick={() => setPriceEditModalItem(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 font-bold"
+                onClick={handleSavePricePopup}
+              >
+                Apply Price
               </Button>
             </div>
           </div>

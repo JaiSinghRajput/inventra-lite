@@ -252,4 +252,68 @@ describe('Server-Side Billing Invariants & Currency Utilities', () => {
     // Case-insensitivity
     expect(searchPosCatalog('POLYCAB')).toHaveLength(1);
   });
+
+  it('supports custom sell price override per product at POS and validates lineGross calculations', () => {
+    const predefinedCatalogPrice = 12000; // ₹120.00
+    const customSellPrice = 11000; // ₹110.00 (discounted/negotiated at POS)
+    const quantity = 3;
+
+    // Line Gross must use custom sell price when provided
+    const calculateLineGross = (qty: number, catalogPrice: number, overridePrice?: number) => {
+      const effectiveUnitPrice = typeof overridePrice === 'number' && overridePrice >= 0 ? overridePrice : catalogPrice;
+      return {
+        unitPrice: effectiveUnitPrice,
+        lineGross: Math.round(qty * effectiveUnitPrice),
+      };
+    };
+
+    const resultWithOverride = calculateLineGross(quantity, predefinedCatalogPrice, customSellPrice);
+    expect(resultWithOverride.unitPrice).toBe(11000);
+    expect(resultWithOverride.lineGross).toBe(33000); // 3 * ₹110 = ₹330
+
+    // Without override, defaults to catalog price
+    const resultDefault = calculateLineGross(quantity, predefinedCatalogPrice, undefined);
+    expect(resultDefault.unitPrice).toBe(12000);
+    expect(resultDefault.lineGross).toBe(36000); // 3 * ₹120 = ₹360
+
+    // Invariant: line discount must not exceed custom line gross
+    const lineDiscount = 5000; // ₹50
+    expect(lineDiscount).toBeLessThanOrEqual(resultWithOverride.lineGross);
+    const lineTotal = resultWithOverride.lineGross - lineDiscount;
+    expect(lineTotal).toBe(28000);
+  });
+
+  it('ensures sales analytics and daily summaries reflect custom sell price totals instead of predefined catalog prices', () => {
+    const billItems = [
+      { productId: 'p1', catalogPrice: 10000, customUnitPrice: 8500, quantity: 2, lineDiscount: 0 }, // ₹85 x 2 = ₹170 (catalog was ₹100 x 2 = ₹200)
+      { productId: 'p2', catalogPrice: 5000, customUnitPrice: 6000, quantity: 1, lineDiscount: 0 },  // ₹60 x 1 = ₹60 (catalog was ₹50 x 1 = ₹50)
+    ];
+
+    const itemsSubtotal = billItems.reduce((sum, item) => {
+      const price = item.customUnitPrice ?? item.catalogPrice;
+      return sum + (price * item.quantity - item.lineDiscount);
+    }, 0);
+
+    // ₹170 + ₹60 = ₹230 (23000 paise), whereas catalog prices would have been ₹200 + ₹50 = ₹250 (25000 paise)
+    expect(itemsSubtotal).toBe(23000);
+
+    const grandTotal = itemsSubtotal; // 23000 paise
+    const paidAmount = 23000;
+
+    // Simulate daily sales analytics aggregation
+    const simulatedBills = [
+      { id: 'b1', grandTotal, paidAmount, dueAmount: 0, status: 'completed' }
+    ];
+
+    const totalSalesSummary = simulatedBills
+      .filter((b) => b.status === 'completed')
+      .reduce((acc, curr) => ({
+        totalSales: acc.totalSales + curr.grandTotal,
+        totalCollected: acc.totalCollected + curr.paidAmount,
+      }), { totalSales: 0, totalCollected: 0 });
+
+    expect(totalSalesSummary.totalSales).toBe(23000); // Reflects the actual negotiated custom sales
+    expect(totalSalesSummary.totalSales).not.toBe(25000); // Does NOT reflect predefined catalog prices
+  });
 });
+

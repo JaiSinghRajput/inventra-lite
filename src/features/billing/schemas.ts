@@ -4,6 +4,7 @@ import { CHARGE_TYPES, PAYMENT_METHODS } from '../../lib/constants';
 export const checkoutItemSchema = z.object({
   productId: z.string(),
   quantity: z.number().positive('Quantity must be greater than 0'),
+  unitPrice: z.number().int().nonnegative('Unit price cannot be negative').optional(),
   lineDiscount: z.number().int().nonnegative('Line discount cannot be negative').default(0),
 });
 
